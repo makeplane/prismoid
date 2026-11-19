@@ -1,0 +1,7 @@
+routing:
+  - goal: "write a technical spec for the new auth system"
+    expect: spec
+  - goal: "draft a project plan with milestones for the launch"
+    expect: spec
+  - goal: "put together a requirements document for this feature"
+    expect: spec

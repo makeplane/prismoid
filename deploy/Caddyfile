@@ -1,0 +1,208 @@
+# Prismoid - the ingress. Three hostnames, one TLS story, and the SSE rules from
+# docs/runbooks/ingress.md made real instead of prose:
+#
+#   app.DOMAIN  → the static SPA          (compression fine - it is files)
+#   api.DOMAIN  → the API                 (NO compression, NO buffering - streams live here)
+#   s3.DOMAIN   → Silo (S3), presigned GETs   (the sigv4 signature covers the Host header)
+#
+# Why Caddy: reverse_proxy does not buffer responses and flushes immediately for
+# text/event-stream; compression exists only where an `encode` directive does (so omitting it
+# on the api host IS the "no compression on stream routes" rule); auto-TLS + h2 kill the
+# HTTP/1.1 six-connections-per-origin limit; and the log `filter` encoder can redact the
+# `?token=` EventSource credential - the normative scrub rule Traefik cannot express.
+#
+# Dry runs (a Linux VM, no DNS): set CADDY_EXTRA_GLOBAL=local_certs in deploy/.env and add
+# /etc/hosts entries for the three names - Caddy signs them from its local CA.
+{
+	email {$ACME_EMAIL} 
+	{$CADDY_EXTRA_GLOBAL}
+	servers {
+		timeouts {
+			read_header 10s
+			read_body 2m
+			# > the 15 s SSE heartbeat, and an ACTIVE stream write resets it. No write
+			# timeout is set anywhere: an idle-but-healthy EventSource lives for hours.
+			idle 15m
+		}
+	}
+}
+
+# Headers both product hostnames carry (imported by app. and api. below).
+(product_headers) {
+	header {
+		# HSTS: after one visit the browser refuses plain HTTP to this host for a year, so a
+		# hostile network cannot strip TLS and read the bearer token on its way in. No
+		# `preload`: that is a one-way submission the operator makes on purpose.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		# The browser takes our Content-Type at its word and never sniffs a response into a
+		# script or a stylesheet.
+		X-Content-Type-Options nosniff
+		# The pre-CSP twin of `frame-ancestors 'none'`: no other site may frame these pages and
+		# trick a click (the product's verbs are one click: cancel, approve, delete).
+		X-Frame-Options DENY
+	}
+}
+
+app.{$DOMAIN} {
+	encode zstd gzip
+	import product_headers
+	header {
+		# The SPA's links to other sites keep our paths (task and project ids) to themselves.
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+	# The SPA's Content-Security-Policy, one directive per clause:
+	#   default-src 'self'        anything not named below loads from this host only.
+	#   script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'
+	#                             the bundle is same-origin. 'unsafe-inline' is load-bearing twice:
+	#                             the SPA shell's index.html carries the router's and the theme's
+	#                             inline boot scripts (their hashes change every build), and an
+	#                             artifact page preview is a sandboxed srcdoc iframe, which INHERITS
+	#                             this policy, so its own inline scripts need it too (the iframe adds
+	#                             its own no-network policy on top). 'wasm-unsafe-eval' lets shiki
+	#                             compile its bundled regex engine; no JS eval is allowed.
+	#   style-src 'self' 'unsafe-inline'
+	#                             React style attributes, shiki's token colours, mermaid's SVG <style>.
+	#   img-src 'self' data: blob: <api> <s3>
+	#                             icons and pasted previews (data:, blob:), images the API serves,
+	#                             and presigned artifact images on the object store.
+	#   font-src 'self' data:     the bundled Inter and JetBrains Mono, and data: fonts in previews.
+	#   media-src 'self' data: blob: <s3>
+	#                             recorded clips (blob:) and presigned media.
+	#   connect-src 'self' https://api.. wss://api.. <s3>
+	#                             the API's JSON and SSE streams, the screen WebSocket (wss: needs
+	#                             naming, https: does not cover it), and presigned fetches of
+	#                             artifact text from the object store.
+	#   object-src <s3>           the PDF rendition is an <object> on a presigned URL; no plugins
+	#                             from anywhere else.
+	#   frame-src 'self' <s3>     artifact previews are srcdoc iframes (no fetch); a browser that
+	#                             renders the PDF <object> as a frame reads it from the store.
+	#   base-uri 'self'           an injected <base> cannot re-root the bundle's relative URLs.
+	#   form-action 'self'        no form posts anywhere else.
+	#   frame-ancestors 'none'    nobody frames the app.
+	# <s3> is S3_PUBLIC_ENDPOINT, the origin presigned URLs are minted for. A provider that signs
+	# virtual-hosted URLs (bucket.endpoint) needs that bucket host added here.
+	header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://api.{$DOMAIN} {$S3_PUBLIC_ENDPOINT}; font-src 'self' data:; media-src 'self' data: blob: {$S3_PUBLIC_ENDPOINT}; connect-src 'self' https://api.{$DOMAIN} wss://api.{$DOMAIN} {$S3_PUBLIC_ENDPOINT}; object-src {$S3_PUBLIC_ENDPOINT}; frame-src 'self' {$S3_PUBLIC_ENDPOINT}; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+	# The SPA host takes GETs of static files; nothing legitimate sends it a body.
+	request_body {
+		max_size 1MB
+	}
+	reverse_proxy web:8080
+	log {
+		output file /data/access-app.log {
+			roll_size 50MiB
+			roll_keep 5
+		}
+	}
+}
+
+# The operator console - its own application on its own hostname. AdminDep (the API's admin
+# scope) is the LOCK; this vhost is the address. THE TEAM'S TAILSCALE FLIP (see
+# deploy/DEPLOY.md, "The operator console"): uncomment the @tailnet matcher pair below and the
+# console answers only over the tailnet; add the matching /v1/admin/* fence on the api host
+# so the admin API is unreachable from the public internet too.
+admin.{$DOMAIN} {
+	encode zstd gzip
+	# Until the flip lands, the password IS the perimeter - so this vhost carries the hardening
+	# the product host does not need: no framing (the console's verbs are one click and
+	# destructive), no referrer leakage of operator URLs (they carry user and task ids), no
+	# indexing, and HSTS. Headers cost nothing and hold whether or not the fence is up.
+	header {
+		Content-Security-Policy "frame-ancestors 'none'"
+		X-Frame-Options DENY
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		X-Robots-Tag "noindex, nofollow"
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	}
+	# @tailnet remote_ip 100.64.0.0/10
+	# handle @tailnet {
+	# 	reverse_proxy web-admin:8080
+	# }
+	# respond "not found" 404
+	reverse_proxy web-admin:8080
+	log {
+		output file /data/access-admin.log {
+			roll_size 50MiB
+			roll_keep 5
+		}
+	}
+}
+
+api.{$DOMAIN} {
+	# NO `encode` here - compression buffers, and buffering kills the stream (ingress.md).
+	import product_headers
+	header {
+		# API URLs carry ids and, on the stream routes, credentials: never send them onward.
+		Referrer-Policy no-referrer
+	}
+	# The API answers JSON and streams, so its default policy forbids everything a document could
+	# load and any framing. `?` sets it only when the app sent none: the connector OAuth return
+	# page brings its own. FastAPI's interactive docs (/docs, /redoc) load Swagger UI and ReDoc
+	# from a CDN with inline boot scripts, so they keep only the framing ban.
+	@docs path /docs /docs/* /redoc /redoc/*
+	@not_docs not path /docs /docs/* /redoc /redoc/*
+	header @not_docs ?Content-Security-Policy "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+	header @docs ?Content-Security-Policy "frame-ancestors 'none'"
+	# The largest legitimate body is a task with its ten attached files, base64 in JSON (about
+	# 70 MB); anything bigger is refused here before the API reads it.
+	request_body {
+		max_size 100MB
+	}
+	# The app's own Cache-Control: no-store / X-Accel-Buffering: no pass through untouched,
+	# as does Last-Event-ID (the entire reconnect protocol rides that request header).
+	reverse_proxy api:8100 {
+		# Write every SSE frame the moment the app flushes it - belt over Caddy's own
+		# text/event-stream auto-detection.
+		flush_interval -1
+	}
+	log {
+		output file /data/access-api.log {
+			roll_size 50MiB
+			roll_keep 10
+		}
+		format filter {
+			wrap json
+			fields {
+				# `?token=` is a real credential on the SSE route (an EventSource cannot
+				# set headers). An access log that keeps it re-leaks what the app's own
+				# telemetry scrubbing already refuses to record. `?ticket=` is the screen
+				# socket's single-use admission (ADR-065): replayable once on another
+				# replica inside its window, so it never rides a log line either.
+				request>uri query {
+					replace token REDACTED
+					replace ticket REDACTED
+				}
+				request>headers>Authorization delete
+				request>headers>Cookie delete
+			}
+		}
+	}
+}
+
+s3.{$DOMAIN} {
+	# Presigned GETs only - the browser's half of the two-endpoint object-store story
+	# (storage.py). Host is preserved by default, which the sigv4 signature requires.
+	@presigned method GET HEAD
+	handle @presigned {
+		reverse_proxy minio:9000
+	}
+	handle {
+		respond 405
+	}
+	log {
+		output file /data/access-s3.log {
+			roll_size 50MiB
+			roll_keep 5
+		}
+		format filter {
+			wrap json
+			fields {
+				# The presign IS a bearer credential for its window - same rule as token=.
+				request>uri query {
+					replace X-Amz-Signature REDACTED
+					replace X-Amz-Credential REDACTED
+				}
+			}
+		}
+	}
+}

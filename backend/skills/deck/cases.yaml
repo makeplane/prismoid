@@ -1,0 +1,7 @@
+routing:
+  - goal: "make a slide deck for the board meeting"
+    expect: deck
+  - goal: "turn this into a ten-slide presentation"
+    expect: deck
+  - goal: "build a pitch deck outline from these points"
+    expect: deck

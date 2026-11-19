@@ -1,0 +1,7 @@
+routing:
+  - goal: "build a three-year revenue forecast model"
+    expect: model
+  - goal: "make me a spreadsheet of the unit economics"
+    expect: model
+  - goal: "put together a budget workbook with the formulas"
+    expect: model

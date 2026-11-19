@@ -1,0 +1,14 @@
+# The web image builds from the repo ROOT (the pnpm workspace: root lockfile + catalog, ADR-071),
+# so this file (BuildKit reads <Dockerfile>.dockerignore beside the Dockerfile) keeps the context to
+# what the build copies. The image runs its own pnpm install: local installs and builds stay out.
+**
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!patches/**
+!web/**
+!packages/**
+**/node_modules/
+web/build/
+web/build-admin/
+web/.react-router/

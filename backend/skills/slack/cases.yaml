@@ -1,0 +1,9 @@
+routing:
+  - goal: "format this update for Slack with numbered points"
+    expect: slack
+  - goal: "rewrite this announcement so I can post it in our team channel on Slack"
+    expect: slack
+  - goal: "draft an email to the client about the delay"
+    expect: email
+  - goal: "turn these notes into a README in Markdown"
+    expect: markdown

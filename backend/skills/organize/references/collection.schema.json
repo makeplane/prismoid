@@ -1,0 +1,355 @@
+{
+  "$defs": {
+    "CollectionField": {
+      "properties": {
+        "key": {
+          "pattern": "^[a-z][a-z0-9_]{0,39}$",
+          "title": "Key",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "options": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Options",
+          "type": "array"
+        },
+        "type": {
+          "$ref": "#/$defs/FieldType"
+        },
+        "unit": {
+          "default": "",
+          "maxLength": 12,
+          "title": "Unit",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "label",
+        "type"
+      ],
+      "title": "CollectionField",
+      "type": "object"
+    },
+    "CollectionRow": {
+      "properties": {
+        "cells": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Cells",
+          "type": "object"
+        },
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "CollectionRow",
+      "type": "object"
+    },
+    "CollectionView": {
+      "properties": {
+        "column_width": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Column Width"
+        },
+        "columns": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Columns",
+          "type": "array"
+        },
+        "cover_field": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cover Field"
+        },
+        "date_field": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Date Field"
+        },
+        "end_field": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "End Field"
+        },
+        "filter": {
+          "items": {
+            "$ref": "#/$defs/FilterSpec"
+          },
+          "title": "Filter",
+          "type": "array"
+        },
+        "group_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Group By"
+        },
+        "layout": {
+          "$ref": "#/$defs/ViewLayout"
+        },
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "sort": {
+          "items": {
+            "$ref": "#/$defs/SortSpec"
+          },
+          "title": "Sort",
+          "type": "array"
+        },
+        "start_field": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Start Field"
+        },
+        "sub_group_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sub Group By"
+        },
+        "widths": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Widths",
+          "type": "object"
+        }
+      },
+      "required": [
+        "name",
+        "layout"
+      ],
+      "title": "CollectionView",
+      "type": "object"
+    },
+    "FieldType": {
+      "enum": [
+        "text",
+        "number",
+        "date",
+        "select",
+        "multi_select",
+        "checkbox",
+        "url",
+        "person"
+      ],
+      "title": "FieldType",
+      "type": "string"
+    },
+    "FilterSpec": {
+      "description": "Carried and validated in v1; applied by future viewers. A published collection is settled\nfacts - the agent publishes the rows it means, and a filter is a lens description.",
+      "properties": {
+        "field": {
+          "title": "Field",
+          "type": "string"
+        },
+        "op": {
+          "enum": [
+            "eq",
+            "ne",
+            "contains",
+            "gte",
+            "lte",
+            "empty",
+            "not_empty"
+          ],
+          "title": "Op",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "field",
+        "op"
+      ],
+      "title": "FilterSpec",
+      "type": "object"
+    },
+    "SortSpec": {
+      "properties": {
+        "direction": {
+          "default": "asc",
+          "enum": [
+            "asc",
+            "desc"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "field": {
+          "title": "Field",
+          "type": "string"
+        }
+      },
+      "required": [
+        "field"
+      ],
+      "title": "SortSpec",
+      "type": "object"
+    },
+    "ViewLayout": {
+      "enum": [
+        "table",
+        "board",
+        "list",
+        "gallery",
+        "gantt",
+        "calendar"
+      ],
+      "title": "ViewLayout",
+      "type": "string"
+    }
+  },
+  "description": "The whole artifact. Frozen, versioned, and self-consistent by construction - the\nvalidator below is the contract the verifier re-checks in the frame.",
+  "properties": {
+    "collection_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Collection Version",
+      "type": "integer"
+    },
+    "fields": {
+      "items": {
+        "$ref": "#/$defs/CollectionField"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "title": "Fields",
+      "type": "array"
+    },
+    "rows": {
+      "items": {
+        "$ref": "#/$defs/CollectionRow"
+      },
+      "maxItems": 5000,
+      "title": "Rows",
+      "type": "array"
+    },
+    "title": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Title",
+      "type": "string"
+    },
+    "views": {
+      "items": {
+        "$ref": "#/$defs/CollectionView"
+      },
+      "maxItems": 12,
+      "minItems": 1,
+      "title": "Views",
+      "type": "array"
+    }
+  },
+  "required": [
+    "title",
+    "fields",
+    "views"
+  ],
+  "title": "Collection",
+  "type": "object"
+}

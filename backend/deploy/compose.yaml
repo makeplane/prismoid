@@ -1,0 +1,136 @@
+# The stack. `just up` brings it to healthy; `just nuke` destroys the data with it.
+# Phase 1 runs the api and worker on the host (`just api`, `just worker`) against these two
+# services; the containerised api/worker land at M9.3 with the production Dockerfile.
+
+name: prismoid
+
+services:
+  postgres:
+    image: postgres:17-alpine@sha256:266d3c257594e195b309ae9d1805e54c788f1d7b375f56bf6c367aac6c917e7b   # pinned by digest; Dependabot bumps it
+    environment:
+      POSTGRES_USER: prismoid
+      POSTGRES_PASSWORD: prismoid
+      POSTGRES_DB: prismoid
+    ports:
+      # 5433, not 5432, on purpose: a dev machine very often already runs Postgres on the
+      # canonical port, and a project that grabs it is a bad citizen — the symptom is a
+      # baffling `role "prismoid" does not exist` from someone else's server. Every URL is a
+      # setting (HANDOFF §14), so this costs one line in .env and nothing else. Loopback only: these are
+      # dev credentials, and a laptop on a cafe network must not offer them to its neighbours.
+      # PRISMOID_DB_PORT moves it when 5433 is taken too (point both database URLs in .env at it).
+      - "127.0.0.1:${PRISMOID_DB_PORT:-5433}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U prismoid -d prismoid"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    command:
+      # LISTEN/NOTIFY is the stream's fan-out (§5.4) and DBOS's queue wake-up; give the
+      # connection budget room for both pools plus psql.
+      - postgres
+      - -c
+      - max_connections=200
+
+  # The object store: Silo, a maintained AGPL fork of the MinIO server (the upstream minio/minio
+  # and minio/mc images are no longer published). It keeps MinIO's S3 API, its MINIO_* settings,
+  # its /minio/health routes and its on-disk format, so the service keeps the name `minio` and an
+  # existing miniodata volume opens as it is.
+  minio:
+    image: pgsty/silo:RELEASE.2026-10-26T00-00-00Z@sha256:7bb2aff6b89efe1cb1303c10fc21d579447434ed06649ac9ec05a5e2dbf30ad7   # pinned by digest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: prismoid
+      # At least 8 characters, or the server exits at boot. The rename's `prismoid123` was 7.
+      MINIO_ROOT_PASSWORD: prismoid1234
+    ports:
+      # The host ports move when another project's object store holds 9000/9001: export PRISMOID_MINIO_PORT and
+      # PRISMOID_MINIO_CONSOLE_PORT before `just up`, and point both S3 endpoints in .env at the new port.
+      # Loopback only, like every port here: the dev root credentials below are public.
+      - "127.0.0.1:${PRISMOID_MINIO_PORT:-9000}:9000"   # S3 API — uploads (internal) and presigned downloads (public)
+      - "127.0.0.1:${PRISMOID_MINIO_CONSOLE_PORT:-9001}:9001"   # console
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mcli", "ready", "local"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # One-shot bucket bootstrap (Silo makes no buckets by itself). Held behind a profile so
+  # `up --wait` never waits on a container whose job is to exit; `just up` runs it with
+  # `compose run --rm`. It reuses the server image, which carries the `mcli` client.
+  minio-init:
+    image: pgsty/silo:RELEASE.2026-10-26T00-00-00Z@sha256:7bb2aff6b89efe1cb1303c10fc21d579447434ed06649ac9ec05a5e2dbf30ad7
+    profiles: ["init"]
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mcli alias set local http://minio:9000 prismoid prismoid1234 &&
+      mcli mb --ignore-existing local/artifacts &&
+      mcli mb --ignore-existing local/snapshots &&
+      mcli mb --ignore-existing local/skills &&
+      mcli ls local
+      "
+
+  # The egress proxy — a bastion with a foot in both worlds (§10).
+  #
+  # It is the ONLY service attached to BOTH networks: `frames` (internal: its members have no route
+  # out, though the host still holds its gateway - see `networks`) and the default network (which
+  # does). That topology is the sandbox: an agent cannot reach the internet except by asking this
+  # process, and this process answers per task, from an allowlist the worker pushed when it
+  # created the frame.
+  egress-proxy:
+    image: python:3.12-slim@sha256:b18b261e1b4974b4f321451ad5251ded85abb22c2b8b262da527dda1d031ab30   # pinned by digest; Dependabot bumps it
+    command: python -u /app/egress.py
+    volumes:
+      - ../prismoid/ai/frames/egress.py:/app/egress.py:ro
+      # egress.py imports exactly two modules of ours - the forward relay it shares with the
+      # device helper's proxy (`prismoid.egress_relay`), and the shared ADR-046 vet that relay
+      # classifies a resolved answer by (`prismoid.schemas.egress.refuse_ip`, the SAME rule the web
+      # door uses, not a second copy). Both are stdlib-only (see their docstrings), so these four
+      # files are everything `/app` (already on `sys.path`, since Python puts a run script's own
+      # directory there) needs to make the imports resolve - nothing else is mounted, and
+      # nothing else is imported.
+      - ../prismoid/__init__.py:/app/prismoid/__init__.py:ro
+      - ../prismoid/egress_relay.py:/app/prismoid/egress_relay.py:ro
+      - ../prismoid/schemas/__init__.py:/app/prismoid/schemas/__init__.py:ro
+      - ../prismoid/schemas/egress.py:/app/prismoid/schemas/egress.py:ro
+    environment:
+      # The control-plane secret (2026-08-09 audit finding #2). The proxy sits on the frame network,
+      # so a frame CAN reach the control port (3129) — this secret is what stops it POSTing /allow to
+      # widen its own allowlist and exfiltrate. The HOST worker (`just worker`) must export the SAME
+      # value (shell or deploy/.env) or its frame register/destroy calls get 403'd. Change it off the
+      # dev default for anything but a laptop.
+      PRISMOID_EGRESS_CONTROL_SECRET: ${PRISMOID_EGRESS_CONTROL_SECRET:-dev-egress-control-secret}
+    ports:
+      - "127.0.0.1:${PRISMOID_EGRESS_CONTROL_PORT:-3129}:3129"   # control plane only — the worker registers frames here, authenticated by the
+                      # shared secret above (a frame on the frames network can also reach 3129, so the
+                      # secret, not the network, is the real guard). The proxy port (3128) is
+                      # deliberately NOT published: nothing outside the frame network may use it.
+                      # Loopback only, so the dev-default secret is never offered to the LAN.
+    networks:
+      - default
+      - frames
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket;socket.create_connection(('127.0.0.1',3128),2)"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+networks:
+  default:
+  frames:
+    name: prismoid_frame_net
+    driver: bridge
+    # internal = no route out. It is NOT gateway-free: Docker still gives the host an address here
+    # (the gateway), so a dev frame can reach host-published dev services through it (ADR-063;
+    # production adds inhibit_ipv4). Making this network inhibit_ipv4 too is a follow-up.
+    internal: true
+
+volumes:
+  pgdata:
+  miniodata:

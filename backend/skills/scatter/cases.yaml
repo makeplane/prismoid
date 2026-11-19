@@ -1,0 +1,7 @@
+routing:
+  - goal: "map the territory of US climate startups into disjoint seats for a wide sweep"
+    expect: scatter
+  - goal: "harvest every qualifying open-source vector database in this seat's territory, with sources"
+    expect: scatter
+  - goal: "find at least 60 European fintech companies with their founding year and funding"
+    expect: scatter

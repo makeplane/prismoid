@@ -1,0 +1,5 @@
+{
+  "GET /v1/spaces (list)": 4.72,
+  "GET /v1/tasks (list 50)": 14.62,
+  "POST /v1/capture (soft intake)": 7.43
+}

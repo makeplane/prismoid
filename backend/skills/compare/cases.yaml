@@ -1,0 +1,7 @@
+routing:
+  - goal: "compare these three vendors and recommend one"
+    expect: compare
+  - goal: "weigh the options for our database and pick one"
+    expect: compare
+  - goal: "which of these tools should we choose and why"
+    expect: compare

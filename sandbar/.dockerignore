@@ -1,0 +1,6 @@
+# The image builds the binary itself; local build output and rootfs blobs stay out of the context.
+bin/
+*.ext4
+.git/
+Dockerfile
+.dockerignore

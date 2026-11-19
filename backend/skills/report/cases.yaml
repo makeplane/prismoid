@@ -1,0 +1,7 @@
+routing:
+  - goal: "write a one-page board memo on Q3 performance"
+    expect: report
+  - goal: "draft a status update for the leadership team"
+    expect: report
+  - goal: "summarise this brief into a short written report"
+    expect: report

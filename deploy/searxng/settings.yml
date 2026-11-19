@@ -1,0 +1,14 @@
+# SearXNG for Plane's search lane (ADR-047) - the self-hosted dev/air-gapped engine.
+# The ONE change from stock: the JSON output format, which `web_search`'s wire speaks.
+# `just searxng` runs it on :8888; point the URLS grammar at it - there is no per-engine
+# setting, by design (ADR-047):  PRISMOID_SEARCH_ENGINES=searxng
+#                               PRISMOID_SEARCH_URLS=searxng=http://localhost:8888
+# No secret_key here: the image reads SEARXNG_SECRET from the environment (the compose stack's
+# deploy/.env; `just searxng` sets a throwaway one) and refuses to start on its stock key.
+# Keep the instance private - it is OUR infrastructure (an operator endpoint, like MinIO),
+# never a public service.
+use_default_settings: true
+search:
+  formats:
+    - html
+    - json

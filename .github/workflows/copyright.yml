@@ -1,0 +1,33 @@
+# The copyright header (ADR-102): every tracked source file opens with COPYRIGHT.txt's notice, in its
+# own comment syntax (`#` for Python and shell, `//` for Go, a `/** */` block for TypeScript,
+# JavaScript and CSS). A pull request that adds a file without it fails here, with an annotation on
+# each file named; `just copyright-fix` writes the header. `just check` holds the same rule through
+# tests/laws; this workflow is its own named status, and installs nothing: the tool is standard-library
+# Python run by the runner's python3.
+name: Copyright
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: copyright-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  headers:
+    name: Copyright headers
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Every source file carries the copyright header
+        run: python3 backend/tools/copyright_header.py

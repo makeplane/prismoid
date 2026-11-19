@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["dev"],
+      "cwd": "web",
+      "port": 5173
+    },
+    {
+      "name": "web-admin",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["dev:admin"],
+      "cwd": "web",
+      "port": 5174
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+# build output
+/bin/
+*.ext4
+
+# nothing durable lives here; runtime state is under SANDBAR_FC_RUN_DIR

@@ -1,0 +1,265 @@
+# The push gate (ADR-008), every push and PR:
+#   check        `just check` - lint, types, layers, audit, quality (ADR-075), unit tests, and the
+#                web half (typecheck + the token guard).
+#   integration  the integration and conformance suites against Postgres and MinIO, on a database
+#                the run migrates and seeds itself, plus the unit tests again, all measured: the
+#                combined coverage lands in the job summary and may not fall under its floor.
+#   sandbar      sandbar's own gate (its Go module): format, vet, staticcheck, the race detector,
+#                govulncheck.
+#   security     known vulnerabilities in the locked Python and JS dependencies, leaked secrets,
+#                and the license gate.
+# The frame tests (Docker, the frame images, the egress proxy) run nightly in integration-frames.yml;
+# the deep drills keep their own schedules (evals nightly, perf nightly, chaos weekly).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend # the service dir (ADR-007); `just` finds the root justfile from here
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install backend deps
+        run: uv sync --frozen
+
+      # Contract drift is a red build, both directions (ADR-006 is one-way — a library change
+      # that the app absorbs; this catches the app changing while docs/api stays stale). The
+      # exporter builds the FastAPI app in-process (create_app — no DB) and writes the three
+      # contract files; a non-empty diff means the frozen contract no longer matches the code.
+      - name: Contract is in sync with the app (regenerate + fail on drift)
+        run: |
+          uv run python tools/export_contract.py
+          git diff --exit-code ../docs/api
+
+      # No version: the action reads the root package.json's packageManager pin (pnpm 12, ADR-071).
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Install node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install the JS workspace (the web app + turbo, one root lockfile)
+        working-directory: .
+        run: pnpm install --frozen-lockfile
+
+      - name: The gate
+        # uvx --from rust-just: the runner image ships no `just` binary (proven 2026-08-31 —
+        # the gate died in 48 s spawning it). rust-just is the just release republished as
+        # wheels; uvx runs it without PATH ceremony, on the uv the job already installed.
+        run: uvx --from rust-just just check
+
+  # The stack-bound suites on every PR. Postgres is a service container on deploy/compose.yaml's
+  # port, so the settings' defaults reach it. The object store (Silo) comes from that compose file
+  # instead, in a step: a service container cannot be given `server /data`, and Silo makes no
+  # buckets until the compose init step makes them.
+  integration:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: prismoid
+          POSTGRES_PASSWORD: prismoid
+          POSTGRES_DB: prismoid
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U prismoid -d prismoid"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+    env:
+      PRISMOID_WORKER_DATABASE_URL: postgresql://prismoid:prismoid@localhost:5433/prismoid
+      PRISMOID_API_DATABASE_URL: postgresql+asyncpg://prismoid:prismoid@localhost:5433/prismoid
+      PRISMOID_WORKER_S3_ENDPOINT: http://localhost:9000
+      PRISMOID_S3_PUBLIC_ENDPOINT: http://localhost:9000
+      # Never called: the suite drives fake models. Some tests still read a provider's key and
+      # fail when none is set, so each gets a placeholder.
+      PRISMOID_WORKER_ANTHROPIC_API_KEY: sk-ant-ci-not-a-key
+      PRISMOID_WORKER_OPENAI_API_KEY: sk-ci-not-a-key
+      PRISMOID_WORKER_GOOGLE_API_KEY: ci-not-a-key
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+
+      - name: The object store and its buckets (the same compose as local)
+        run: |
+          docker compose -f deploy/compose.yaml up -d --wait minio
+          docker compose -f deploy/compose.yaml run --rm minio-init
+
+      - name: Install backend deps
+        run: uv sync --frozen
+
+      - name: Unit tests and laws (measured)
+        run: uv run pytest tests/unit tests/laws --cov --cov-report= --cov-fail-under=0
+
+      # PRISMOID_TEST_FRESH_DB: the conftest migrates an empty database, seeds what a fresh install
+      # needs (models, builtin skills, one account made on the box), and every xdist worker clones
+      # that. The `frames` mark is the frame tests, left to the nightly.
+      - name: Integration and conformance (measured)
+        env:
+          PRISMOID_TEST_FRESH_DB: "1"
+        run: >-
+          uv run pytest tests/integration tests/conformance -n auto --dist loadgroup
+          -m "not perf and not frames" --cov --cov-append --cov-report= --cov-fail-under=0
+
+      - name: Coverage (unit + integration, combined) in the job summary, held to its floor
+        run: |
+          total="$(uv run coverage report --format=total || true)"
+          {
+            echo "## Backend coverage: ${total}%"
+            echo
+            echo "Unit, laws, integration and conformance combined; the frame tests run nightly."
+            echo "The floor is \`fail_under\` in backend/pyproject.toml: raise it when the number rises."
+            echo
+            echo '<details><summary>Least covered modules</summary>'
+            echo
+            uv run coverage report --format=markdown --sort=cover --skip-covered | head -n 42
+            echo
+            echo '</details>'
+          } >> "$GITHUB_STEP_SUMMARY"
+          uv run coverage report --format=total > /dev/null
+
+  # sandbar is its own Go module (ADR-013): the S2 per-sandbox networks and adoption, the relay's
+  # caps and the API shapes have pure and played-Engine tests that need no Docker. The Docker tier
+  # stays off here - the runner has a socket, and the live egress tests also need the relay image
+  # (sandbar README, Testing) - so SANDBAR_DOCKER_SOCK points nowhere and those tests skip.
+  sandbar:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: sandbar
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: sandbar/go.mod
+          cache-dependency-path: sandbar/go.sum
+
+      - name: Format
+        run: test -z "$(gofmt -l .)" || (echo 'gofmt:' && gofmt -l . && false)
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build
+        run: |
+          go build ./...
+          GOOS=linux go build ./...
+
+      # Exact versions, so the gate does not move under a PR. Both need Go 1.26 or newer; the `go`
+      # command switches to the module's toolchain line on its own.
+      - name: Staticcheck
+        run: go run honnef.co/go/tools/cmd/staticcheck@2026.2.2 ./...
+
+      - name: Test with the race detector (the Docker tier skips)
+        env:
+          SANDBAR_DOCKER_SOCK: /nonexistent
+        run: go test -race ./...
+
+      # The guest daemon's tests act on the guest's real layout: they run as root and need /work.
+      - name: Test the guest daemon as root
+        run: sudo mkdir -p /work && sudo -E env "PATH=$PATH" go test -race ./cmd/sandbar-guestd/
+
+      # Reachable vulnerabilities, the standard library's included, for the Go this module builds with.
+      - name: Govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+
+  security:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # gitleaks reads the commits a push or PR brings
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+
+      # The lockfile, hashed and exact, without installing anything.
+      - name: Python vulnerabilities (pip-audit over the locked set)
+        run: |
+          uv export --frozen --no-emit-project --format requirements-txt --quiet > "$RUNNER_TEMP/requirements.txt"
+          uvx pip-audit==2.10.1 --requirement "$RUNNER_TEMP/requirements.txt" --disable-pip --progress-spinner off
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Install node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: JS vulnerabilities (production dependencies, high and critical)
+        working-directory: .
+        run: pnpm audit --prod --audit-level high
+
+      - name: Secrets (gitleaks, pinned binary, checksum verified)
+        working-directory: .
+        env:
+          GITLEAKS_VERSION: 8.30.1
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/gitleaks.tgz" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/gitleaks.tgz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/gitleaks.tgz" -C "$RUNNER_TEMP" gitleaks
+          # The commits this push or PR brings; the whole history when there is no base (a manual
+          # run, or a branch's first push).
+          range=()
+          if [ -n "$BASE_SHA" ] && [ "$BASE_SHA" != "0000000000000000000000000000000000000000" ]; then
+            range=("--log-opts=${BASE_SHA}..HEAD")
+          fi
+          "$RUNNER_TEMP/gitleaks" git --redact --no-banner "${range[@]}" .
+
+      - name: Install backend deps (the license gate reads the installed set)
+        run: uv sync --frozen
+
+      - name: Install the JS workspace (pnpm licenses reads node_modules)
+        working-directory: .
+        run: pnpm install --frozen-lockfile
+
+      - name: License gate (every dependency compatible with AGPL-3.0-only, or reviewed)
+        run: uv run python tools/license_gate.py

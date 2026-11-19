@@ -1,0 +1,7 @@
+routing:
+  - goal: "review this proposal and tell me what is wrong with it"
+    expect: critique
+  - goal: "critique this plan for gaps and risks"
+    expect: critique
+  - goal: "what are the weaknesses in this strategy document"
+    expect: critique

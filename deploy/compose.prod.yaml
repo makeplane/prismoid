@@ -1,0 +1,420 @@
+# Prismoid - the whole product on one Docker host, one command.
+#
+#   cp deploy/.env.example deploy/.env      # set your model key(s) and any URLs
+#   docker build -t prismoid-frame:prod backend/prismoid/ai/frames/image   # the sandbox rootfs
+#   docker compose -f deploy/compose.prod.yaml --env-file deploy/.env up --build
+#
+# This is the sovereign single-box deployment: Postgres (the record + the queue), Silo (the
+# object store, a maintained fork of the MinIO server), sandbard (microVM/sandbox daemon) with
+# sandbar-egress (its relay, joined to the internal network sandbard makes for each frame with domains; needs a Docker Engine at the floor -
+# deploy/DEPLOY.md, "Upgrading to the S2 frame network"), Caddy (TLS + the SSE-safe ingress), and
+# the API + worker + web from the two product images. It is the SAME four ports ADR-012 names - swap any service's
+# URL in .env and you have swapped that provider (managed Postgres, R2, a hyperscaler bucket) with
+# no edit here.
+#
+# Frames run through sandbar (frame_driver=sandbar): the worker never touches Docker; sandbard
+# owns the socket and isolates each frame. On a bare/sovereign machine, run sandbard as a host
+# service with its firecracker backend for own-kernel isolation - see DEPLOY.md.
+#
+# The public surface is Caddy on 80/443 and NOTHING else: api/web/minio-S3 are reached only
+# over the compose network; the MinIO console binds loopback (SSH tunnel to use it); sandbar's
+# egress proxy publishes nothing: frame containers reach it only through `sandbar-egress`, the
+# relay on each one's own internal network (ADR-063 S2). Every ${VAR:?} below is a secret deploy/.env must set - a missing one fails `config`,
+# not the first user.
+
+name: prismoid
+
+# The backend image.
+x-backend-build: &backend-build
+  context: ../backend
+
+x-backend-env: &backend-env
+  PRISMOID_ENV: prod
+  # The release git sha, pinned per deploy (ADR-027): same-sha worker restarts ADOPT in-flight
+  # work; a cross-sha boot sweeps the old version's queued ghosts loudly. deploy.sh writes
+  # GIT_SHA into deploy/.env on every deploy - "dev" is only ever the local fallback. Shared
+  # env (not worker-only) since /healthz/full reports it as `checks.version`: the API answers
+  # "which release is live?" and must wear the same stamp the worker gates recovery on.
+  PRISMOID_WORKER_APP_VERSION: ${GIT_SHA:-dev}
+  # Machines on: a task's remembered computer, on sandbar's Docker backend. The lever ships on
+  # here because sandbar's four gates (a network of its own per frame, a reported sandbox state,
+  # the JSON egress 409, root's files removed at a step boundary) were met on 2026-10-06
+  # (ADR-063 "Operating it"). PRISMOID_MACHINES_ENABLED=false is the rollback: a frame per step.
+  PRISMOID_MACHINES_ENABLED: "true"
+  # Computer use on: the computer door seats the computer for a browser or shell ask, and the API
+  # serves the screen. Off (the code's default), every such ask falls to a writer and the screen
+  # answers "off" - Machines and the screen keys would be for nothing. Shared: the worker routes,
+  # the API serves the screen. COMPUTER_USE=false in deploy/.env is the kill switch (the rollback):
+  # browser asks go to the other lanes, and Machines keep running files work.
+  PRISMOID_COMPUTER_USE_ENABLED: ${COMPUTER_USE:-true}
+  # The browser profile's image (the base frame image plus Chromium): the worker refuses a browser
+  # profile at create without it. deploy.sh builds it beside FRAME_IMAGE.
+  PRISMOID_WORKER_SANDBAR_BROWSER_IMAGE: ${FRAME_BROWSER_IMAGE:-prismoid-frame-browser:prod}
+  # One database, two URLs: DBOS speaks sync libpq, the API speaks asyncpg (HANDOFF §14). The bare
+  # ${VAR:-…} defaults are the on-box Postgres; setting API_DATABASE_URL/WORKER_DATABASE_URL
+  # in deploy/.env is how a managed Postgres arrives with no edit here (ADR-012's four ports).
+  # The password has no fallback: a box that forgot it must fail `config`, not boot on a
+  # credential anyone can read in this file.
+  PRISMOID_API_DATABASE_URL: ${API_DATABASE_URL:-postgresql+asyncpg://prismoid:${POSTGRES_PASSWORD:?generation command in deploy/.env.example}@postgres:5432/prismoid}
+  PRISMOID_WORKER_DATABASE_URL: ${WORKER_DATABASE_URL:-postgresql://prismoid:${POSTGRES_PASSWORD:?generation command in deploy/.env.example}@postgres:5432/prismoid}
+  # Object store - internal endpoint for the worker's uploads. Defaults are the on-box MinIO
+  # (profile `minio`, COMPOSE_PROFILES in deploy/.env); pointing S3_* at any S3-compatible
+  # provider (DO Spaces, R2, a hyperscaler bucket) swaps the store with no edit here. Bucket
+  # names are overridable because shared-namespace providers (Spaces) need globally unique ones.
+  PRISMOID_WORKER_S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+  PRISMOID_WORKER_S3_ACCESS_KEY: ${S3_ACCESS_KEY:-${MINIO_USER:-prismoid}}
+  PRISMOID_WORKER_S3_SECRET_KEY: ${S3_SECRET_KEY:-${MINIO_PASSWORD:?generation command in deploy/.env.example}}
+  PRISMOID_WORKER_ARTIFACT_BUCKET: ${S3_ARTIFACT_BUCKET:-artifacts}
+  PRISMOID_WORKER_SNAPSHOT_BUCKET: ${S3_SNAPSHOT_BUCKET:-snapshots}
+  PRISMOID_WORKER_SKILL_BUCKET: ${S3_SKILL_BUCKET:-skills}
+  # Public endpoint - where a BROWSER fetches a presigned download (https://s3.DOMAIN through
+  # Caddy). Required: presigned URLs are minted against it, so a wrong value signs links no
+  # client can fetch.
+  PRISMOID_S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:?set S3_PUBLIC_ENDPOINT in deploy/.env}
+  # Model muscle - a vendor key, or point PRISMOID_GATEWAY_* at a self-hosted vLLM/Ollama.
+  PRISMOID_WORKER_ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  PRISMOID_WORKER_OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  PRISMOID_WORKER_GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+  # Tier 2–3 gateway (§9): xAI rides the OpenAI-compatible provider (ADR-024).
+  PRISMOID_GATEWAY_XAI_API_KEY: ${XAI_API_KEY:-}
+  # Web search (ADR-047): no engine, no `web.search` tool. Empty by default; a keyed engine
+  # (brave, tavily, ...) or the opt-in `searxng` service below fills them from deploy/.env. Shared:
+  # the worker searches, and the API plans too (a replan writes the planner's brief, which says
+  # whether a step can read the internet), so both must read the same chain.
+  PRISMOID_SEARCH_ENGINES: ${PRISMOID_SEARCH_ENGINES:-}
+  PRISMOID_SEARCH_KEYS: ${PRISMOID_SEARCH_KEYS:-}
+  PRISMOID_SEARCH_URLS: ${PRISMOID_SEARCH_URLS:-}
+  PRISMOID_SEARCH_PRICES_PER_1K: ${PRISMOID_SEARCH_PRICES_PER_1K:-}
+  PRISMOID_SEARCH_MODELS: ${PRISMOID_SEARCH_MODELS:-}
+  # The screen door's key (ADR-065): required, because the Machines above are on and a screen
+  # without a key would 503. The generation command is in deploy/.env.example.
+  PRISMOID_API_SCREEN_SIGNING_KEY: ${SCREEN_SIGNING_KEY:?the prefix s1 then openssl rand -base64 32 (see deploy/.env.example)}
+  # A sandbar Machine's screen (ADR-065): on, with sandbard holding SANDBAR_DISPLAY_KEYS
+  # (required below). Shared, because the API (claims, the relay) and the worker (a step yielding
+  # to a lease) must agree.
+  PRISMOID_COMPUTER_USE_SANDBAR_SCREEN: ${SANDBAR_SCREEN:-true}
+  # Outbound email (ADR-031) - reset codes and security notices. smtp is MANDATORY here: the
+  # boot validator refuses console with PRISMOID_ENV=prod (the console backend would print
+  # users' reset codes into `docker logs`). Set the SMTP_* values in deploy/.env.
+  PRISMOID_EMAIL_BACKEND: ${EMAIL_BACKEND:-smtp}
+  PRISMOID_EMAIL_FROM_ADDRESS: ${EMAIL_FROM:-Prismoid <no-reply@plane.local>}
+  PRISMOID_EMAIL_SMTP_HOST: ${SMTP_HOST:-}
+  PRISMOID_EMAIL_SMTP_PORT: ${SMTP_PORT:-587}
+  PRISMOID_EMAIL_SMTP_USERNAME: ${SMTP_USERNAME:-}
+  PRISMOID_EMAIL_SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  # Durable keys - BOTH processes must share them and they must survive container recreation.
+  # Without these env values each container generates its own key file in its own writable
+  # layer: the worker signs, the API fails to verify, and a recreate silently invalidates every
+  # prior verification report and orphans every stored connector token (conf.py §Signing/§Connectors).
+  PRISMOID_SIGNING_PRIVATE_KEY: ${SIGNING_PRIVATE_KEY:?generation command in deploy/.env.example}
+  PRISMOID_CONNECTORS_ENCRYPTION_KEY: ${CONNECTORS_ENCRYPTION_KEY:?generation command in deploy/.env.example}
+  PRISMOID_CONNECTORS_KEY_ID: ${CONNECTORS_KEY_ID:-v1}
+  # Telemetry - a silent no-op while empty (send_to_logfire="if-token-present"); set the token
+  # and the whole instrumentation story lights up. OTLP endpoint = the sovereign dual-export.
+  LOGFIRE_TOKEN: ${LOGFIRE_TOKEN:-}
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+  # stdout: JSON log records only, never a span (ADR-101); console prints every span.
+  PRISMOID_LOG_FORMAT: ${PRISMOID_LOG_FORMAT:-json}
+  PRISMOID_LOG_LEVEL: ${PRISMOID_LOG_LEVEL:-info}
+
+# Third-party images are pinned by digest (the tag records what it was resolved from).
+services:
+  postgres:
+    image: postgres:17-alpine@sha256:266d3c257594e195b309ae9d1805e54c788f1d7b375f56bf6c367aac6c917e7b
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: prismoid
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?generation command in deploy/.env.example}
+      POSTGRES_DB: prismoid
+    volumes: [pgdata:/var/lib/postgresql/data]
+    command: [postgres, -c, max_connections=200] # LISTEN/NOTIFY + two pools + psql (§5.4)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U prismoid -d prismoid"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # Self-hosted object store - active only under COMPOSE_PROFILES=minio (the default in
+  # .env.example). A managed S3 provider (DO Spaces, R2) deactivates the profile and sets the
+  # S3_* variables instead; the containers below simply never start. The server is Silo, a
+  # maintained AGPL fork of MinIO (whose own images are no longer published): it keeps MinIO's
+  # S3 API, MINIO_* settings, health routes and on-disk format, so the service, the profile and
+  # the miniodata volume keep their names and an existing volume opens as it is.
+  minio:
+    profiles: [minio]
+    image: pgsty/silo:RELEASE.2026-10-26T00-00-00Z@sha256:7bb2aff6b89efe1cb1303c10fc21d579447434ed06649ac9ec05a5e2dbf30ad7
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_USER:-prismoid}
+      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD:?generation command in deploy/.env.example}
+    ports:
+      # 9000 is deliberately NOT published: browsers fetch presigned downloads through Caddy at
+      # s3.DOMAIN. The console binds loopback - reach it over an SSH tunnel, never the WAN.
+      - "127.0.0.1:9001:9001"
+    volumes: [miniodata:/data]
+    healthcheck:
+      test: ["CMD", "mcli", "ready", "local"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # Silo makes no buckets by itself; this one-shot does, with the `mcli` client the server image
+  # carries.
+  minio-init:
+    profiles: [minio]
+    image: pgsty/silo:RELEASE.2026-10-26T00-00-00Z@sha256:7bb2aff6b89efe1cb1303c10fc21d579447434ed06649ac9ec05a5e2dbf30ad7
+    depends_on:
+      minio: {condition: service_healthy}
+    entrypoint: >
+      /bin/sh -c "
+      mcli alias set local http://minio:9000 ${MINIO_USER:-prismoid} ${MINIO_PASSWORD:?generation command in deploy/.env.example} &&
+      mcli mb --ignore-existing local/artifacts &&
+      mcli mb --ignore-existing local/snapshots &&
+      mcli mb --ignore-existing local/skills && mcli ls local"
+
+  # One-shot: bring the schema to head and seed the builtin skills, then exit. The api/worker wait
+  # on it, so they never start against a database a migration has not touched.
+  migrate:
+    build: *backend-build
+    image: ${BACKEND_IMAGE:-prismoid/backend}
+    entrypoint: ["/bin/sh", "-c", "alembic upgrade head && prismoid skills seed"]
+    environment: *backend-env
+    depends_on:
+      postgres: {condition: service_healthy}
+      # The skills seed writes to the skills bucket, which minio-init makes: on a first boot the
+      # seed would otherwise race it and fail (NoSuchBucket). Not required, so a managed store
+      # (the minio profile off, the bucket the provider's) still starts.
+      minio-init: {condition: service_completed_successfully, required: false}
+
+  # The sandbox daemon. Docker backend (spawns frame containers on the host via the mounted
+  # socket) + egress on. The frame image it launches is PRISMOID_WORKER_SANDBAR_IMAGE - build it
+  # first (see the header). A sandbox with domains gets an internal network of its own (a /28 of
+  # SANDBAR_DOCKER_EGRESS_POOL, no gateway) with sandbar-egress joined to it - no other sandbox is
+  # ever on it - and reaches the proxy only through that relay; sandbard joins none (ADR-063 S2).
+  # A restart adopts the sandboxes it made and keeps them at exit, so a deploy costs no warm
+  # Machine its work.
+  sandbard:
+    build: {context: ../sandbar}
+    image: ${SANDBAR_IMAGE:-prismoid/sandbard}
+    restart: unless-stopped
+    environment:
+      SANDBAR_ADDR: 0.0.0.0:7070
+      SANDBAR_TOKEN: ${SANDBAR_TOKEN:?generation command in deploy/.env.example}
+      SANDBAR_BACKENDS: docker
+      SANDBAR_BACKEND: docker
+      SANDBAR_EGRESS: "on"
+      SANDBAR_EGRESS_ADDR: 0.0.0.0:7080
+      SANDBAR_DOCKER_EGRESS_POOL: 10.213.0.0/16
+      SANDBAR_RELAY_CONTAINER: sandbar-egress
+      SANDBAR_EGRESS_URL: http://sandbar-egress:7080
+      # The screen's display route (ADR-065): the public half of SCREEN_SIGNING_KEY, so
+      # sandbar verifies the API's display tickets and can never mint one. Required: empty would
+      # be a display route that 503s under a screen the stack says is on.
+      SANDBAR_DISPLAY_KEYS: ${SANDBAR_DISPLAY_KEYS:?the public half of SCREEN_SIGNING_KEY, derived with the openssl line in deploy/.env.example}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    # The image runs as an unprivileged user; the socket's group is what lets it reach the Engine.
+    # Its id is host-specific: deploy.sh pins it on every deploy (stat -c %g /var/run/docker.sock).
+    group_add:
+      - "${DOCKER_GID:?getent group docker | cut -d: -f3}"
+    # A sandbox can provoke a denial per request: rotate, or a loop fills the box's disk (S2).
+    logging: &rotated-logs
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+    # The API serves only after the boot adopts every sandbox (the relay joins each network again).
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:7070/healthz || exit 1"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 5m
+    # sandbard joins the relay to each sandbox's network by name; a recreated relay has left them
+    # all, so sandbard restarts with it and its boot joins it again.
+    depends_on:
+      sandbar-egress: {condition: service_started, restart: true}
+
+  # A sandbox network's one door out (ADR-063 S2): a TCP pipe from each sandbox's own network to
+  # the proxy. It parses nothing (the proxy authenticates and allowlists) and reaches only
+  # sandbard:7080, so a sandbox that finds it reaches the proxy and nothing else - never the API or
+  # the socket. sandbard joins it to each network (SANDBAR_RELAY_CONTAINER names it).
+  sandbar-egress:
+    build: {context: ../sandbar}
+    image: ${SANDBAR_IMAGE:-prismoid/sandbard}
+    container_name: sandbar-egress
+    restart: unless-stopped
+    command: [relay]
+    user: "65534:65534"
+    read_only: true
+    cap_drop: [ALL]
+    environment:
+      SANDBAR_RELAY_ADDR: 0.0.0.0:7080
+      SANDBAR_RELAY_TO: sandbard:7080
+    # The relay's refusal and dial-failure lines are already one per sandbox per 10 s; rotate anyway.
+    logging: *rotated-logs
+
+  api:
+    build: *backend-build
+    image: ${BACKEND_IMAGE:-prismoid/backend}
+    restart: unless-stopped
+    command: [run, api, --host, 0.0.0.0, --port, "8100"]
+    environment:
+      <<: *backend-env
+      PRISMOID_API_PUBLIC_BASE_URL: ${API_PUBLIC_URL:?set API_PUBLIC_URL in deploy/.env}
+      # CSV; ADMIN_ORIGIN (the operator console's https://admin.$DOMAIN) is optional so a
+      # deploy without the console keeps working - an empty item is filtered at parse (conf.py).
+      PRISMOID_API_CORS_ORIGINS: ${WEB_ORIGIN:?set WEB_ORIGIN in deploy/.env},${ADMIN_ORIGIN:-}
+      # Caddy is the only route in (8100 is not host-published), so trusting every proxy hop is
+      # exactly conf.py's sanctioned case - and without it the per-IP login/reset limits see one
+      # IP: Caddy's (an unauthenticated caller could 429 the password-reset door for everyone).
+      PRISMOID_API_FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-*}
+      # Invite-only: a hosted box takes a signup only with a workspace invite for that address.
+      # The first platform admin is made on the box (`prismoid admin bootstrap`, PROVISION.md §7).
+      PRISMOID_AUTH_SIGNUP_ENABLED: ${SIGNUP_ENABLED:-false}
+      # A sandbar Machine's screen: the API dials sandbar's display route with a display ticket it
+      # signs - never SANDBAR_TOKEN, which only the worker holds (ADR-065).
+      PRISMOID_API_SANDBAR_URL: http://sandbard:7070
+    # No published ports: Caddy reaches api:8100 on the compose network.
+    healthcheck:
+      # The bare probe (status only). No curl in python:3.12-slim - stdlib does it.
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8100/healthz', timeout=3).status == 200 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      # No minio edge: the store is reached lazily at first upload, and a hard dependency here
+      # would contradict the profile mechanics above (compose refuses a depends_on to a
+      # profile-disabled service). First-boot bucket creation still rides minio-init.
+      postgres: {condition: service_healthy}
+      migrate: {condition: service_completed_successfully}
+
+  worker:
+    build: *backend-build
+    image: ${BACKEND_IMAGE:-prismoid/backend}
+    restart: unless-stopped
+    command: [run, worker]
+    environment:
+      <<: *backend-env
+      PRISMOID_WORKER_FRAME_DRIVER: sandbar
+      PRISMOID_WORKER_SANDBAR_URL: http://sandbard:7070
+      PRISMOID_WORKER_SANDBAR_TOKEN: ${SANDBAR_TOKEN:?generation command in deploy/.env.example}
+      PRISMOID_WORKER_SANDBAR_BACKEND: docker
+      PRISMOID_WORKER_SANDBAR_IMAGE: ${FRAME_IMAGE:-prismoid-frame:prod}
+    healthcheck:
+      # The worker has no HTTP surface; its liveness IS the Beat row it pulses every minute
+      # (system_beats, STALE_AFTER_S=150). psycopg ships in the image via DBOS - no code needed.
+      test:
+        - CMD-SHELL
+        - >-
+          python -c 'import os,sys,psycopg;
+          row = psycopg.connect(os.environ["PRISMOID_WORKER_DATABASE_URL"], connect_timeout=3).execute("select extract(epoch from (now() - beat_at)) from system_beats where name = %s", ("worker",)).fetchone();
+          sys.exit(0 if row and row[0] is not None and float(row[0]) < 180 else 1)'
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      # Boot reaps frames, syncs agent actors, and pulses before consuming - give it room.
+      start_period: 120s
+    depends_on:
+      postgres: {condition: service_healthy}
+      migrate: {condition: service_completed_successfully}
+      sandbard: {condition: service_healthy}
+
+  # The opt-in search engine (ADR-047): runs only under the `search` profile, which deploy.sh adds
+  # when PRISMOID_SEARCH_ENGINES names searxng. It publishes no port: the worker reaches it at
+  # http://searxng:8080 on the compose network, and nothing else should.
+  searxng:
+    profiles: [search]
+    image: searxng/searxng:latest@sha256:606fc8852a53f0be4ac05116950ff480f6f56b8ef7d77b366868cc76478036e5
+    restart: unless-stopped
+    # compose interpolates a profile-disabled service too, so a `${SEARXNG_SECRET:?}` here would
+    # fail every stack that leaves search off. The guard runs at start instead (and deploy.sh
+    # refuses the same case before it stops anything).
+    entrypoint:
+      - sh
+      - -c
+      - >-
+        [ -n "$$SEARXNG_SECRET" ] || { echo "SEARXNG_SECRET is empty: set it in deploy/.env
+        (openssl rand -hex 32, see deploy/.env.example)" >&2; exit 1; };
+        exec /usr/local/searxng/entrypoint.sh
+    environment:
+      # The image overrides server.secret_key with this; the mounted settings carry none.
+      SEARXNG_SECRET: ${SEARXNG_SECRET:-}
+    volumes:
+      - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
+    logging: *rotated-logs
+
+  web:
+    build:
+      context: ..   # the repo root: the pnpm workspace (ADR-071)
+      dockerfile: web/Dockerfile
+      args:
+        # Baked into the SPA bundle - the URL a BROWSER uses to reach the API.
+        VITE_PRISMOID_API_URL: ${API_PUBLIC_URL:?set API_PUBLIC_URL in deploy/.env}
+    image: ${WEB_IMAGE:-prismoid/web}
+    restart: unless-stopped
+    # No published ports: Caddy reaches web:8080 on the compose network.
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
+  # The operator console - a SEPARATE application from the same web/Dockerfile (APP_TARGET=admin;
+  # see web/Dockerfile): its own bundle, its own container, its own hostname (admin.$DOMAIN in
+  # the Caddyfile). The public web image carries none of it. Fencing the hostname to the
+  # tailnet is the ingress's job - see deploy/DEPLOY.md, "The operator console".
+  web-admin:
+    build:
+      context: ..   # the repo root: the pnpm workspace (ADR-071)
+      dockerfile: web/Dockerfile
+      args:
+        VITE_PRISMOID_API_URL: ${API_PUBLIC_URL:?set API_PUBLIC_URL in deploy/.env}
+        APP_TARGET: admin
+    image: ${WEB_ADMIN_IMAGE:-prismoid/web-admin}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
+  # The ingress (deploy/Caddyfile): TLS for the three public hostnames, h2, no buffering or
+  # compression on the api host, token= redacted from its own access logs, HSTS and a
+  # Content-Security-Policy on the app and api hosts. The ONLY service published on 0.0.0.0.
+  caddy:
+    image: caddy:2.11-alpine@sha256:003a97808e781aa9f7e75cc2f43d34d461099031faf5e20faefb9f61126836f0
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # h3
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in deploy/.env}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in deploy/.env}
+      # The app host's Content-Security-Policy names the object store's public origin, so the
+      # SPA may fetch, show and embed presigned downloads from it and from nowhere else.
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:?set S3_PUBLIC_ENDPOINT in deploy/.env}
+      # Empty in prod. `local_certs` turns a VM dry-run into a self-signed rehearsal.
+      CADDY_EXTRA_GLOBAL: ${CADDY_EXTRA_GLOBAL:-}
+    volumes:
+      # Default ingress serves all three hostnames (app/api/s3). A managed object store makes
+      # the s3 vhost pointless - CADDYFILE=./Caddyfile.managed-s3 drops it (.env.example).
+      - ${CADDYFILE:-./Caddyfile}:/etc/caddy/Caddyfile:ro
+      - caddydata:/data # certificates - MUST persist or recreates burn Let's Encrypt rate limits
+      - caddyconfig:/config
+    depends_on:
+      api: {condition: service_started}
+      web: {condition: service_started}
+      web-admin: {condition: service_started}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:2019/config/"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  pgdata:
+  miniodata:
+  caddydata:
+  caddyconfig:

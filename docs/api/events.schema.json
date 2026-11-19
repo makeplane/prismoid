@@ -1,0 +1,6637 @@
+{
+  "$defs": {
+    "Activity": {
+      "description": "One tiny operation, as it happens - the progress tree's live rows (the plan's\nmicro-activity taxonomy). Kinds narrate the machine's layers:\n\n  tool     - a tool call: `start` the moment pydantic-ai validates it, `end` with\n             ok + duration when the result lands. The durable `tool.called` remains\n             the record; the web reconciles the two by `tool_call_id`.\n  model    - a model request round: `start` when the request opens (\"Thinking\u2026\"),\n             `end` when the first visible part arrives (\"Thought for Ns\").\n  thinking - the model's reasoning STREAMING (`delta` + `text`), when a model emits\n             thinking parts. Ephemeral like every Lane-2 frame: never persisted,\n             absent on replay - the live-only richness, like message deltas.\n  engine   - the step machinery around the model: frame prep, input mounting,\n             skill loading, harvest, the system-side publishes. Taking the task's\n             Machine carries `tool` \"machine\": its `end` is the step holding it.\n  phase    - the pre-step machinery: clarifier / planner / namer brackets, emitted\n             by the OPERATION around the (emit-less) agents; on these frames `tool`\n             carries WHO is working - the machinery agent's name - for the tree's\n             identity rows.\n\n`label` on TOOL frames follows tool.called.summary's redaction posture: locators only - a path,\na clamped command, `type:path`, a count - never file content, never raw args (`ai/tools/labels.py`\nis the one policy). Engine/phase labels are the machinery's own sentences, clamped to the same width.",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "after_seq": {
+          "title": "After Seq",
+          "type": "integer"
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "channel": {
+          "title": "Channel",
+          "type": "string"
+        },
+        "duration_ms": {
+          "default": 0,
+          "title": "Duration Ms",
+          "type": "integer"
+        },
+        "kind": {
+          "enum": [
+            "tool",
+            "model",
+            "thinking",
+            "engine",
+            "phase"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string"
+        },
+        "lane": {
+          "const": "live",
+          "default": "live",
+          "title": "Lane",
+          "type": "string"
+        },
+        "ok": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ok"
+        },
+        "phase": {
+          "enum": [
+            "start",
+            "end",
+            "delta"
+          ],
+          "title": "Phase",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "text": {
+          "default": "",
+          "title": "Text",
+          "type": "string"
+        },
+        "tool": {
+          "default": "",
+          "title": "Tool",
+          "type": "string"
+        },
+        "tool_call_id": {
+          "default": "",
+          "title": "Tool Call Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "activity",
+          "default": "activity",
+          "title": "Type",
+          "type": "string"
+        },
+        "wait_s": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Wait S"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "after_seq",
+        "channel",
+        "kind",
+        "phase"
+      ],
+      "title": "Activity",
+      "type": "object"
+    },
+    "ActorRef": {
+      "description": "The audit envelope - the ONLY place the word \"actor\" appears in an external payload.\n\nEverywhere else the API says *user*, *agent*, or *API key*. Internally everything joins on\none `actor_id`; the split is presentation and lifecycle, not attribution.",
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "user",
+            "agent",
+            "api_key"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "id",
+        "name"
+      ],
+      "title": "ActorRef",
+      "type": "object"
+    },
+    "ArtifactDelta": {
+      "description": "Text-like artifacts stream their content. Binary artifacts NEVER stream bytes - an xlsx\nstreams `progress` facts (sheets written, rows) and renders on harvest.",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "after_seq": {
+          "title": "After Seq",
+          "type": "integer"
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "channel": {
+          "title": "Channel",
+          "type": "string"
+        },
+        "lane": {
+          "const": "live",
+          "default": "live",
+          "title": "Lane",
+          "type": "string"
+        },
+        "offset": {
+          "default": 0,
+          "title": "Offset",
+          "type": "integer"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "type": {
+          "const": "artifact.delta",
+          "default": "artifact.delta",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "after_seq",
+        "channel",
+        "path",
+        "text"
+      ],
+      "title": "ArtifactDelta",
+      "type": "object"
+    },
+    "ArtifactProduced": {
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "artifact_id": {
+          "format": "uuid",
+          "title": "Artifact Id",
+          "type": "string"
+        },
+        "artifact_type": {
+          "$ref": "#/$defs/ArtifactType"
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "bytes": {
+          "title": "Bytes",
+          "type": "integer"
+        },
+        "filename": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filename"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "role": {
+          "default": "deliverable",
+          "title": "Role",
+          "type": "string"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "sha256": {
+          "title": "Sha256",
+          "type": "string"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "type": {
+          "const": "artifact.produced",
+          "default": "artifact.produced",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq",
+        "artifact_id",
+        "artifact_type",
+        "title",
+        "sha256",
+        "bytes"
+      ],
+      "title": "ArtifactProduced",
+      "type": "object"
+    },
+    "ArtifactRevised": {
+      "description": "A new immutable revision on an existing lineage - a human edit saved, or a\nfollow-up's re-publish of the same deliverable. Append-only like everything else: the old\nversion keeps its bytes, its verification, and its history; this frame is how every surface\nlearns which id is now the lineage's face.",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "artifact_id": {
+          "format": "uuid",
+          "title": "Artifact Id",
+          "type": "string"
+        },
+        "artifact_type": {
+          "$ref": "#/$defs/ArtifactType"
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "bytes": {
+          "title": "Bytes",
+          "type": "integer"
+        },
+        "filename": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filename"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "lineage_id": {
+          "format": "uuid",
+          "title": "Lineage Id",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "revision": {
+          "title": "Revision",
+          "type": "integer"
+        },
+        "role": {
+          "default": "deliverable",
+          "title": "Role",
+          "type": "string"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "sha256": {
+          "title": "Sha256",
+          "type": "string"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "supersedes_id": {
+          "format": "uuid",
+          "title": "Supersedes Id",
+          "type": "string"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "type": {
+          "const": "artifact.revised",
+          "default": "artifact.revised",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq",
+        "artifact_id",
+        "supersedes_id",
+        "lineage_id",
+        "revision",
+        "artifact_type",
+        "title",
+        "sha256",
+        "bytes"
+      ],
+      "title": "ArtifactRevised",
+      "type": "object"
+    },
+    "ArtifactSnapshot": {
+      "description": "A durable checkpoint of a long text write (~every 8 KB), so a reconnect mid-write renders\nthe latest state instead of nothing. This is what makes Lane-2 loss survivable.",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "content": {
+          "title": "Content",
+          "type": "string"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "offset": {
+          "title": "Offset",
+          "type": "integer"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "artifact.snapshot",
+          "default": "artifact.snapshot",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq",
+        "path",
+        "offset",
+        "content"
+      ],
+      "title": "ArtifactSnapshot",
+      "type": "object"
+    },
+    "ArtifactType": {
+      "enum": [
+        "document",
+        "spreadsheet",
+        "deck",
+        "code",
+        "webapp",
+        "dataset",
+        "collection",
+        "council_opinion",
+        "council_report",
+        "fleet_report",
+        "image",
+        "recording",
+        "change"
+      ],
+      "title": "ArtifactType",
+      "type": "string"
+    },
+    "BotMemoryWritten": {
+      "description": "memory_extract ran for a DM turn's bot: what the task's keeper bot learned. Its own\ntype - not a field on `memory.written` - so `latest_of_type` keeps each extraction's\nper-turn idempotence trivial, and the rail can say \"{bot} learned\" in its own voice.\n`count: 0` is the same honest silence `memory.written` records.",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "bot": {
+          "default": "",
+          "title": "Bot",
+          "type": "string"
+        },
+        "count": {
+          "default": 0,
+          "title": "Count",
+          "type": "integer"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/MemoryStub"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "turn": {
+          "default": 1,
+          "title": "Turn",
+          "type": "integer"
+        },
+        "type": {
+          "const": "bot_memory.written",
+          "default": "bot_memory.written",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq"
+      ],
+      "title": "BotMemoryWritten",
+      "type": "object"
+    },
+    "BudgetFigures": {
+      "description": "The money behind a \"Budget reached\" gate, as the Bursar saw it when the gate opened: the\nceiling it hit, what that ceiling had spent, and the coming wave's estimate when the wave\nprojection opened it (0 when the spend alone reached the ceiling). A raise that resumes the\nwave clears `max(ceiling_usd, spent_usd + projected_usd)`.\n\nThe run guard reads the same shape live (`TaskDeps.spend`, `ai/rules/budget.reached`).\n`exhausted`: the workspace has spent its allowance (ADR-103), which stops the task whatever its\nceiling - 0 when it has none. An \"allowance spent\" gate wears it with zero dollars: the floor it\nhit is the workspace's allowance.",
+      "properties": {
+        "ceiling_usd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Ceiling Usd"
+        },
+        "exhausted": {
+          "default": false,
+          "title": "Exhausted",
+          "type": "boolean"
+        },
+        "projected_usd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "default": "0",
+          "title": "Projected Usd"
+        },
+        "spent_usd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Spent Usd"
+        }
+      },
+      "required": [
+        "ceiling_usd",
+        "spent_usd"
+      ],
+      "title": "BudgetFigures",
+      "type": "object"
+    },
+    "ContextAssembled": {
+      "description": "What this task was told beyond its ask - ids, lanes, token counts, truncations.\n\nThe context ledger's spend record: every memory a turn was told is named here - its pack at\nplanning, then each note a `memory_search` returned. \"Why did the machine know that\" is this event.\nPayload stays bounded (previews, not full texts) so it rides NOTIFY inline.",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "lanes": {
+          "items": {
+            "$ref": "#/$defs/ContextLaneView"
+          },
+          "title": "Lanes",
+          "type": "array"
+        },
+        "memory_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "title": "Memory Ids",
+          "type": "array"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "total_tokens": {
+          "default": 0,
+          "title": "Total Tokens",
+          "type": "integer"
+        },
+        "type": {
+          "const": "context.assembled",
+          "default": "context.assembled",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq"
+      ],
+      "title": "ContextAssembled",
+      "type": "object"
+    },
+    "ContextItemView": {
+      "properties": {
+        "memory_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Memory Id"
+        },
+        "preview": {
+          "title": "Preview",
+          "type": "string"
+        }
+      },
+      "required": [
+        "preview"
+      ],
+      "title": "ContextItemView",
+      "type": "object"
+    },
+    "ContextLaneView": {
+      "properties": {
+        "budget": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Budget"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/ContextItemView"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "lane": {
+          "$ref": "#/$defs/LaneName"
+        },
+        "tokens": {
+          "title": "Tokens",
+          "type": "integer"
+        },
+        "truncated": {
+          "default": false,
+          "title": "Truncated",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "lane",
+        "tokens"
+      ],
+      "title": "ContextLaneView",
+      "type": "object"
+    },
+    "CredKind": {
+      "description": "Which table a credential row lives in: a login session's or an API key's.",
+      "enum": [
+        "session",
+        "api_key"
+      ],
+      "title": "CredKind",
+      "type": "string"
+    },
+    "Criteria": {
+      "description": "The task's acceptance criteria, as the Planner understood them. Amended by steers;\nthe amendment history is kept, because 'what did it think I asked for' is the first question\nanyone asks of a wrong answer.",
+      "properties": {
+        "amendments": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Amendments",
+          "type": "array"
+        },
+        "audience": {
+          "default": "",
+          "title": "Audience",
+          "type": "string"
+        },
+        "must": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Must",
+          "type": "array"
+        },
+        "should": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Should",
+          "type": "array"
+        },
+        "tone": {
+          "default": "",
+          "title": "Tone",
+          "type": "string"
+        }
+      },
+      "title": "Criteria",
+      "type": "object"
+    },
+    "Diagnosis": {
+      "description": "Why we gave up, written for the human who has to decide what to do next.\n\nAn escalation without a diagnosis is a shrug with a stack trace attached.",
+      "properties": {
+        "attempts": {
+          "title": "Attempts",
+          "type": "integer"
+        },
+        "evidence": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence",
+          "type": "array"
+        },
+        "suggested_next": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Suggested Next",
+          "type": "array"
+        },
+        "what_failed": {
+          "title": "What Failed",
+          "type": "string"
+        },
+        "why": {
+          "title": "Why",
+          "type": "string"
+        }
+      },
+      "required": [
+        "what_failed",
+        "why",
+        "attempts"
+      ],
+      "title": "Diagnosis",
+      "type": "object"
+    },
+    "DocumentFormat": {
+      "enum": [
+        "md",
+        "docx",
+        "pdf",
+        "html"
+      ],
+      "type": "string"
+    },
+    "EscalationRaised": {
+      "description": "We stopped, and we say why - in a form a human can act on.",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "diagnosis": {
+          "$ref": "#/$defs/Diagnosis"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "escalation.raised",
+          "default": "escalation.raised",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq",
+        "diagnosis"
+      ],
+      "title": "EscalationRaised",
+      "type": "object"
+    },
+    "GateAction": {
+      "description": "The three actions, verbatim from MCP elicitation.",
+      "enum": [
+        "accept",
+        "decline",
+        "cancel"
+      ],
+      "title": "GateAction",
+      "type": "string"
+    },
+    "GateKind": {
+      "enum": [
+        "approve",
+        "input",
+        "budget",
+        "connect",
+        "pause",
+        "control"
+      ],
+      "title": "GateKind",
+      "type": "string"
+    },
+    "GateOpened": {
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "asks_because": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Asks Because",
+          "type": "array"
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "budget_figures": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BudgetFigures"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "budget_scope": {
+          "default": "",
+          "title": "Budget Scope",
+          "type": "string"
+        },
+        "connector_slug": {
+          "default": "",
+          "title": "Connector Slug",
+          "type": "string"
+        },
+        "expires_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expires At"
+        },
+        "gate_id": {
+          "format": "uuid",
+          "title": "Gate Id",
+          "type": "string"
+        },
+        "host": {
+          "default": "",
+          "title": "Host",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/GateKind"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "questions": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/QuestionSet"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "reason": {
+          "default": "",
+          "title": "Reason",
+          "type": "string"
+        },
+        "scopes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Scopes",
+          "type": "array"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "source": {
+          "default": "connector",
+          "title": "Source",
+          "type": "string"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "type": {
+          "const": "gate.opened",
+          "default": "gate.opened",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq",
+        "gate_id",
+        "kind",
+        "title"
+      ],
+      "title": "GateOpened",
+      "type": "object"
+    },
+    "GateResolved": {
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/GateAction"
+        },
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "content": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Content"
+        },
+        "defaulted": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Defaulted"
+        },
+        "gate_id": {
+          "format": "uuid",
+          "title": "Gate Id",
+          "type": "string"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "gate.resolved",
+          "default": "gate.resolved",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq",
+        "gate_id",
+        "action"
+      ],
+      "title": "GateResolved",
+      "type": "object"
+    },
+    "LaneName": {
+      "enum": [
+        "instructions",
+        "user",
+        "project",
+        "bot",
+        "thread",
+        "skills"
+      ],
+      "type": "string"
+    },
+    "LeadEndingKind": {
+      "description": "How a Lead run ended: the wire field `ending` on the Lead step's terminal `step.state`.",
+      "enum": [
+        "reply",
+        "plan",
+        "ask",
+        "propose",
+        "fail",
+        "deliver",
+        "decline"
+      ],
+      "title": "LeadEndingKind",
+      "type": "string"
+    },
+    "MachineControlClaimed": {
+      "description": "Someone took control of the Machine's browser (ADR-065). The envelope's `actor`\nis the holder. `private`: the mask is on - nobody else sees the screen until it ends. A holder\nwho switches privacy on or off is recorded again; a reload's re-claim is not.",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "private": {
+          "default": false,
+          "title": "Private",
+          "type": "boolean"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "machine.control_claimed",
+          "default": "machine.control_claimed",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq"
+      ],
+      "title": "MachineControlClaimed",
+      "type": "object"
+    },
+    "MachineControlEnded": {
+      "description": "A control lease ended. The envelope's `actor` is the person who held it;\n`ended_by` is the Project owner who ended someone else's (`reason == \"ended\"`), else None.\n`held_s` is how long it was held. `lease_since` names the lease that ended (its claim's\n`since`, the lease's identity - a person's name is not one); absent on endings recorded before\nit was carried. Only claims and endings are recorded - never input.",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "ended_by": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "held_s": {
+          "default": 0,
+          "title": "Held S",
+          "type": "integer"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "lease_since": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lease Since"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "machine.control_ended",
+          "default": "machine.control_ended",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq",
+        "reason"
+      ],
+      "title": "MachineControlEnded",
+      "type": "object"
+    },
+    "MachineCreated": {
+      "description": "The task's Machine was created: the early boot, the first step that needed a frame, or a\nfork's seed. `seeded_as_of` is when the parent's files it started from were taken (a fork only).",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "profile": {
+          "title": "Profile",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "seeded_as_of": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seeded As Of"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "machine.created",
+          "default": "machine.created",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq",
+        "profile"
+      ],
+      "title": "MachineCreated",
+      "type": "object"
+    },
+    "MachineNeed": {
+      "description": "What a plan asks of the task's Machine, on `task.planned`.",
+      "enum": [
+        "none",
+        "files",
+        "computer"
+      ],
+      "title": "MachineNeed",
+      "type": "string"
+    },
+    "MachineRebuilt": {
+      "description": "The Machine started fresh: its checkpoint expired or was lost (a rebuild, never a failure).",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "retention_days": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Retention Days"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "machine.rebuilt",
+          "default": "machine.rebuilt",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq",
+        "reason"
+      ],
+      "title": "MachineRebuilt",
+      "type": "object"
+    },
+    "MachineReset": {
+      "description": "An editor reset the Machine (`actor`): its frame and checkpoint are gone.",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "machine.reset",
+          "default": "machine.reset",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq"
+      ],
+      "title": "MachineReset",
+      "type": "object"
+    },
+    "MachineSlept": {
+      "description": "The Machine's checkpoint was stored and its frame destroyed. `after_s` is how long it was\nidle or parked; `dropped_bytes` is set when `/work` was over the size cap and was not kept.\n`actor` (the envelope) is set only for Sleep now.",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "after_s": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "After S"
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "dropped_bytes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dropped Bytes"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "machine.slept",
+          "default": "machine.slept",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq",
+        "reason"
+      ],
+      "title": "MachineSlept",
+      "type": "object"
+    },
+    "MachineWoke": {
+      "description": "A new frame restored the Machine for a step. `actor` is the turn's author.",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "browser_restored": {
+          "default": true,
+          "title": "Browser Restored",
+          "type": "boolean"
+        },
+        "from_park": {
+          "default": false,
+          "title": "From Park",
+          "type": "boolean"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "profile": {
+          "title": "Profile",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "turn": {
+          "title": "Turn",
+          "type": "integer"
+        },
+        "type": {
+          "const": "machine.woke",
+          "default": "machine.woke",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq",
+        "turn",
+        "profile"
+      ],
+      "title": "MachineWoke",
+      "type": "object"
+    },
+    "MemoryStub": {
+      "description": "One minted memory, sized for the transcript marker (the ledger holds the full row).",
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "text"
+      ],
+      "title": "MemoryStub",
+      "type": "object"
+    },
+    "MemoryWritten": {
+      "description": "memory_extract ran. `count: 0` is valid and load-bearing - \"extraction ran, kept\nsilence\" - and its existence is the replay guard that makes remember() idempotent\n**per turn**: the guard compares `turn` against the task's, so each turn's delivery\ngets its own extraction (old events deserialize as turn 1).",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "count": {
+          "default": 0,
+          "title": "Count",
+          "type": "integer"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/MemoryStub"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "skipped": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Skipped"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "turn": {
+          "default": 1,
+          "title": "Turn",
+          "type": "integer"
+        },
+        "type": {
+          "const": "memory.written",
+          "default": "memory.written",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq"
+      ],
+      "title": "MemoryWritten",
+      "type": "object"
+    },
+    "MessageDelta": {
+      "description": "Markdown, append-only. Never HTML (XSS), never a retro-edit of what was already sent -\na correction is a new message, not a rewrite of streamed history.",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "after_seq": {
+          "title": "After Seq",
+          "type": "integer"
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "channel": {
+          "title": "Channel",
+          "type": "string"
+        },
+        "lane": {
+          "const": "live",
+          "default": "live",
+          "title": "Lane",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "type": {
+          "const": "message.delta",
+          "default": "message.delta",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "after_seq",
+        "channel",
+        "text"
+      ],
+      "title": "MessageDelta",
+      "type": "object"
+    },
+    "MessageEnd": {
+      "description": "Terminates in a durable `step.narration` carrying the same markdown in full.",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "after_seq": {
+          "title": "After Seq",
+          "type": "integer"
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "channel": {
+          "title": "Channel",
+          "type": "string"
+        },
+        "lane": {
+          "const": "live",
+          "default": "live",
+          "title": "Lane",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "message.end",
+          "default": "message.end",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "after_seq",
+        "channel"
+      ],
+      "title": "MessageEnd",
+      "type": "object"
+    },
+    "MessageStart": {
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "after_seq": {
+          "title": "After Seq",
+          "type": "integer"
+        },
+        "agent": {
+          "default": "",
+          "title": "Agent",
+          "type": "string"
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "channel": {
+          "title": "Channel",
+          "type": "string"
+        },
+        "lane": {
+          "const": "live",
+          "default": "live",
+          "title": "Lane",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "message.start",
+          "default": "message.start",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "after_seq",
+        "channel"
+      ],
+      "title": "MessageStart",
+      "type": "object"
+    },
+    "PauseApplied": {
+      "description": "A pause took hold: a step parked at a tool dispatch (`step_id`), or the frontier held.",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "safe_point": {
+          "$ref": "#/$defs/SafePoint"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "pause.applied",
+          "default": "pause.applied",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq",
+        "safe_point"
+      ],
+      "title": "PauseApplied",
+      "type": "object"
+    },
+    "PlanEdge": {
+      "properties": {
+        "from_step": {
+          "format": "uuid",
+          "title": "From Step",
+          "type": "string"
+        },
+        "kind": {
+          "default": "depends_on",
+          "enum": [
+            "depends_on",
+            "produces_for"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "to_step": {
+          "format": "uuid",
+          "title": "To Step",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from_step",
+        "to_step"
+      ],
+      "title": "PlanEdge",
+      "type": "object"
+    },
+    "PlanEdit": {
+      "description": "Append-only. A replan is an *edit with history*, never a new plan.",
+      "properties": {
+        "added": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "title": "Added",
+          "type": "array"
+        },
+        "amended": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "title": "Amended",
+          "type": "array"
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "command_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Command Id"
+        },
+        "epoch": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Epoch"
+        },
+        "kind": {
+          "$ref": "#/$defs/PlanEditKind"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "removed": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "title": "Removed",
+          "type": "array"
+        }
+      },
+      "required": [
+        "kind",
+        "reason",
+        "at"
+      ],
+      "title": "PlanEdit",
+      "type": "object"
+    },
+    "PlanEditKind": {
+      "enum": [
+        "replan",
+        "steer",
+        "clarify",
+        "ask",
+        "expand",
+        "hatch",
+        "lead"
+      ],
+      "title": "PlanEditKind",
+      "type": "string"
+    },
+    "PlanEdited": {
+      "description": "A replan is an edit with history, never a new plan.",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "edit": {
+          "$ref": "#/$defs/PlanEdit"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "plan.edited",
+          "default": "plan.edited",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq",
+        "edit"
+      ],
+      "title": "PlanEdited",
+      "type": "object"
+    },
+    "PlanStepView": {
+      "description": "A step as the API and the CLI see it. Never an ORM row.",
+      "properties": {
+        "acceptance": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Acceptance",
+          "type": "array"
+        },
+        "agent": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Agent"
+        },
+        "attempt": {
+          "default": 0,
+          "title": "Attempt",
+          "type": "integer"
+        },
+        "bot_version": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bot Version"
+        },
+        "gate_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gate Id"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/StepKind"
+        },
+        "lane_role": {
+          "anyOf": [
+            {
+              "enum": [
+                "outline",
+                "outline_draft",
+                "section",
+                "harmonize",
+                "assembly",
+                "express",
+                "scatter_map",
+                "gather",
+                "synthesis",
+                "fleet_table"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lane Role"
+        },
+        "model_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model Ref"
+        },
+        "state": {
+          "$ref": "#/$defs/StepState"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "why": {
+          "default": "",
+          "title": "Why",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "kind",
+        "state"
+      ],
+      "title": "PlanStepView",
+      "type": "object"
+    },
+    "PlanView": {
+      "properties": {
+        "criteria": {
+          "$ref": "#/$defs/Criteria"
+        },
+        "edges": {
+          "items": {
+            "$ref": "#/$defs/PlanEdge"
+          },
+          "title": "Edges",
+          "type": "array"
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/PlanStepView"
+          },
+          "title": "Steps",
+          "type": "array"
+        }
+      },
+      "title": "PlanView",
+      "type": "object"
+    },
+    "PresenceHere": {
+      "properties": {
+        "actor": {
+          "$ref": "#/$defs/ActorRef"
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "conn": {
+          "title": "Conn",
+          "type": "string"
+        },
+        "editor": {
+          "default": true,
+          "title": "Editor",
+          "type": "boolean"
+        },
+        "lane": {
+          "const": "live",
+          "default": "live",
+          "title": "Lane",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "presence.here",
+          "default": "presence.here",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "actor",
+        "conn"
+      ],
+      "title": "PresenceHere",
+      "type": "object"
+    },
+    "PresenceJoin": {
+      "properties": {
+        "actor": {
+          "$ref": "#/$defs/ActorRef"
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "conn": {
+          "title": "Conn",
+          "type": "string"
+        },
+        "editor": {
+          "default": true,
+          "title": "Editor",
+          "type": "boolean"
+        },
+        "lane": {
+          "const": "live",
+          "default": "live",
+          "title": "Lane",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "presence.join",
+          "default": "presence.join",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "actor",
+        "conn"
+      ],
+      "title": "PresenceJoin",
+      "type": "object"
+    },
+    "PresenceLeave": {
+      "properties": {
+        "actor": {
+          "$ref": "#/$defs/ActorRef"
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "conn": {
+          "title": "Conn",
+          "type": "string"
+        },
+        "editor": {
+          "default": true,
+          "title": "Editor",
+          "type": "boolean"
+        },
+        "lane": {
+          "const": "live",
+          "default": "live",
+          "title": "Lane",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "presence.leave",
+          "default": "presence.leave",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "actor",
+        "conn"
+      ],
+      "title": "PresenceLeave",
+      "type": "object"
+    },
+    "PresenceTyping": {
+      "properties": {
+        "actor": {
+          "$ref": "#/$defs/ActorRef"
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "conn": {
+          "title": "Conn",
+          "type": "string"
+        },
+        "editor": {
+          "default": true,
+          "title": "Editor",
+          "type": "boolean"
+        },
+        "lane": {
+          "const": "live",
+          "default": "live",
+          "title": "Lane",
+          "type": "string"
+        },
+        "mode": {
+          "enum": [
+            "follow_up",
+            "steer",
+            "answer"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "on": {
+          "title": "On",
+          "type": "boolean"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "presence.typing",
+          "default": "presence.typing",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "actor",
+        "conn",
+        "on",
+        "mode"
+      ],
+      "title": "PresenceTyping",
+      "type": "object"
+    },
+    "Progress": {
+      "description": "The no-dead-air signal: an honest sign of life at least every 10 s while a step runs.\nFrontend-only - never fed back to the model.",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "after_seq": {
+          "title": "After Seq",
+          "type": "integer"
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "channel": {
+          "title": "Channel",
+          "type": "string"
+        },
+        "detail": {
+          "default": "",
+          "title": "Detail",
+          "type": "string"
+        },
+        "elapsed_s": {
+          "title": "Elapsed S",
+          "type": "number"
+        },
+        "lane": {
+          "const": "live",
+          "default": "live",
+          "title": "Lane",
+          "type": "string"
+        },
+        "phase": {
+          "title": "Phase",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "tokens_so_far": {
+          "default": 0,
+          "title": "Tokens So Far",
+          "type": "integer"
+        },
+        "type": {
+          "const": "progress",
+          "default": "progress",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "after_seq",
+        "channel",
+        "phase",
+        "elapsed_s"
+      ],
+      "title": "Progress",
+      "type": "object"
+    },
+    "QAFinding": {
+      "properties": {
+        "instruction": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Instruction",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/QAFindingKind"
+        },
+        "location": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Location",
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/$defs/QASeverity"
+        }
+      },
+      "required": [
+        "location",
+        "severity",
+        "kind",
+        "instruction"
+      ],
+      "title": "QAFinding",
+      "type": "object"
+    },
+    "QAFindingKind": {
+      "description": "The finding taxonomy - aligned with the published long-form coherence error types\n(BooookScore's eight), so findings are span-anchored instances of a validated\nvocabulary rather than a homegrown vibe scale.",
+      "enum": [
+        "missing_content",
+        "truncation",
+        "continuity",
+        "structure",
+        "formatting",
+        "figure",
+        "acceptance",
+        "duplication",
+        "discontinuity",
+        "salience",
+        "inconsistency",
+        "layout"
+      ],
+      "title": "QAFindingKind",
+      "type": "string"
+    },
+    "QAReviewed": {
+      "description": "The long-form lane's pre-delivery editorial verdict - NOT verification.\n\nOne frame per QA pass on the assembly step: pass, revise (with the findings the rebuild was handed), or\npass_unread (the read could not run; checks were clean; the note shipped). The findings survive here for\nthe follow-up turn - \"fix section 7\" reads this frame, not a scratch file. Clamped at the policy layer\nbefore emit; the reviewer identity comes from the LEDGER, never from the model's self-report.",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "attempt": {
+          "default": 1,
+          "title": "Attempt",
+          "type": "integer"
+        },
+        "findings": {
+          "items": {
+            "$ref": "#/$defs/QAFinding"
+          },
+          "title": "Findings",
+          "type": "array"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "reviewer_family": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reviewer Family"
+        },
+        "reviewer_model": {
+          "default": "",
+          "title": "Reviewer Model",
+          "type": "string"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "summary": {
+          "default": "",
+          "title": "Summary",
+          "type": "string"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "qa.reviewed",
+          "default": "qa.reviewed",
+          "title": "Type",
+          "type": "string"
+        },
+        "verdict": {
+          "title": "Verdict",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq",
+        "verdict"
+      ],
+      "title": "QAReviewed",
+      "type": "object"
+    },
+    "QASeverity": {
+      "enum": [
+        "blocker",
+        "major",
+        "minor"
+      ],
+      "title": "QASeverity",
+      "type": "string"
+    },
+    "Question": {
+      "properties": {
+        "allow_other": {
+          "default": false,
+          "title": "Allow Other",
+          "type": "boolean"
+        },
+        "default": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Default"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "options": {
+          "items": {
+            "$ref": "#/$defs/QuestionOption"
+          },
+          "title": "Options",
+          "type": "array"
+        },
+        "prompt": {
+          "title": "Prompt",
+          "type": "string"
+        },
+        "required": {
+          "default": true,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "type": {
+          "$ref": "#/$defs/QuestionType"
+        }
+      },
+      "required": [
+        "id",
+        "prompt",
+        "type"
+      ],
+      "title": "Question",
+      "type": "object"
+    },
+    "QuestionOption": {
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "label"
+      ],
+      "title": "QuestionOption",
+      "type": "object"
+    },
+    "QuestionSet": {
+      "description": "ONE numbered batch per gate - never dripped.",
+      "properties": {
+        "context": {
+          "default": "",
+          "title": "Context",
+          "type": "string"
+        },
+        "expires_at": {
+          "format": "date-time",
+          "title": "Expires At",
+          "type": "string"
+        },
+        "on_timeout": {
+          "$ref": "#/$defs/TimeoutPolicy",
+          "default": "proceed_with_defaults"
+        },
+        "questions": {
+          "items": {
+            "$ref": "#/$defs/Question"
+          },
+          "minItems": 1,
+          "title": "Questions",
+          "type": "array"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "questions",
+        "expires_at"
+      ],
+      "title": "QuestionSet",
+      "type": "object"
+    },
+    "QuestionType": {
+      "enum": [
+        "text",
+        "number",
+        "boolean",
+        "single_select",
+        "multi_select"
+      ],
+      "title": "QuestionType",
+      "type": "string"
+    },
+    "SafePoint": {
+      "enum": [
+        "before_model",
+        "before_tool",
+        "final_answer",
+        "approval",
+        "replan",
+        "rerun",
+        "interrupt",
+        "boundary"
+      ],
+      "title": "SafePoint",
+      "type": "string"
+    },
+    "ScreenAction": {
+      "description": "An agent's acting verb that succeeded: the pane flashes `box` for 1.5 s, so\neveryone watching sees where the agent clicked or typed. Host and path only - never a query\nstring (the `fetch_label` law). State, not content: never persisted, no `id:`, exempt from the\ndurable-snapshot rule like presence; the act's record is its own `tool.called` row.",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "box": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScreenBox"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "host": {
+          "default": "",
+          "title": "Host",
+          "type": "string"
+        },
+        "lane": {
+          "const": "live",
+          "default": "live",
+          "title": "Lane",
+          "type": "string"
+        },
+        "path": {
+          "default": "",
+          "title": "Path",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "screen.action",
+          "default": "screen.action",
+          "title": "Type",
+          "type": "string"
+        },
+        "verb": {
+          "title": "Verb",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "verb"
+      ],
+      "title": "ScreenAction",
+      "type": "object"
+    },
+    "ScreenBox": {
+      "description": "An element's box in viewport CSS px - the screencast's own coordinates.",
+      "properties": {
+        "h": {
+          "title": "H",
+          "type": "number"
+        },
+        "w": {
+          "title": "W",
+          "type": "number"
+        },
+        "x": {
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "w",
+        "h"
+      ],
+      "title": "ScreenBox",
+      "type": "object"
+    },
+    "ScreenState": {
+      "description": "Who drives the browser (`holder`; None = nobody: the agent), whether privately (the mask is\non for everyone else), and until when unless renewed. Sent on every lease change - a claim, a\nre-claim, Renew, a release, an end, an expiry - and when a closed socket's grace starts. A\nrenewal by input sends nothing. The relay re-reads the row when it hears one.",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "holder": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "lane": {
+          "const": "live",
+          "default": "live",
+          "title": "Lane",
+          "type": "string"
+        },
+        "private": {
+          "default": false,
+          "title": "Private",
+          "type": "boolean"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "screen.state",
+          "default": "screen.state",
+          "title": "Type",
+          "type": "string"
+        },
+        "until": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Until"
+        }
+      },
+      "required": [
+        "task_id",
+        "at"
+      ],
+      "title": "ScreenState",
+      "type": "object"
+    },
+    "SteerApplied": {
+      "description": "Running work took a steer (`step_id`: the step, none for a re-plan); what it superseded, could not undo.",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "already_done": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Already Done",
+          "type": "array"
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "author": {
+          "default": "",
+          "title": "Author",
+          "type": "string"
+        },
+        "command_id": {
+          "format": "uuid",
+          "title": "Command Id",
+          "type": "string"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "safe_point": {
+          "$ref": "#/$defs/SafePoint"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "step_title": {
+          "default": "",
+          "title": "Step Title",
+          "type": "string"
+        },
+        "superseded": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "title": "Superseded",
+          "type": "array"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "steer.applied",
+          "default": "steer.applied",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq",
+        "command_id",
+        "safe_point"
+      ],
+      "title": "SteerApplied",
+      "type": "object"
+    },
+    "SteerRejected": {
+      "description": "The system refused a steer it had accepted, by rule; the reason is shown to everyone.",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "command_id": {
+          "format": "uuid",
+          "title": "Command Id",
+          "type": "string"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "steer.rejected",
+          "default": "steer.rejected",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq",
+        "command_id",
+        "reason"
+      ],
+      "title": "SteerRejected",
+      "type": "object"
+    },
+    "SteerRetracted": {
+      "description": "Its author withdrew a steer before it applied (`actor` is the author).",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "command_id": {
+          "format": "uuid",
+          "title": "Command Id",
+          "type": "string"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "steer.retracted",
+          "default": "steer.retracted",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq",
+        "command_id"
+      ],
+      "title": "SteerRetracted",
+      "type": "object"
+    },
+    "StepDequeued": {
+      "description": "The step's workflow started on the step queue: running \u2192 step.dequeued is queue hop 2, per step.",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "step.dequeued",
+          "default": "step.dequeued",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq"
+      ],
+      "title": "StepDequeued",
+      "type": "object"
+    },
+    "StepKind": {
+      "enum": [
+        "step",
+        "gate",
+        "artifact"
+      ],
+      "title": "StepKind",
+      "type": "string"
+    },
+    "StepNarration": {
+      "description": "The durable terminal of a Lane-2 `message.*` stream: the full markdown, once.",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "markdown": {
+          "title": "Markdown",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "step.narration",
+          "default": "step.narration",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq",
+        "markdown"
+      ],
+      "title": "StepNarration",
+      "type": "object"
+    },
+    "StepPrompt": {
+      "description": "The assembled prompt a step's agent was actually given - the one context injection the\nrecord did not carry (the DeepSeek-Harness lesson worth stealing).\n\nFor a bot author, \"why did my bot do that\" is unanswerable from narrations alone: the answer\nis in the prompt - the goal as retold, the answers folded in, the skills named, the\nacceptance lines, the retry gotchas. One durable frame per attempt, clipped at the cap with\nan honest marker, never silently. The mounted FILES (thread.md, context.md, sources) are\nnamed by the prompt rather than duplicated into it - they are already durable elsewhere.",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "agent": {
+          "title": "Agent",
+          "type": "string"
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "attempt": {
+          "title": "Attempt",
+          "type": "integer"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "model_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model Ref"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "prompt": {
+          "title": "Prompt",
+          "type": "string"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "truncated": {
+          "default": false,
+          "title": "Truncated",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "step.prompt",
+          "default": "step.prompt",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq",
+        "attempt",
+        "agent",
+        "prompt"
+      ],
+      "title": "StepPrompt",
+      "type": "object"
+    },
+    "StepState": {
+      "description": "The step machine. Transitions outside it raise InvalidTransition - the map is the spec.",
+      "enum": [
+        "pending",
+        "ready",
+        "running",
+        "verifying",
+        "done",
+        "retrying",
+        "escalated",
+        "skipped"
+      ],
+      "title": "StepState",
+      "type": "string"
+    },
+    "StepStateChanged": {
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "agent": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Agent"
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "attempt": {
+          "default": 1,
+          "title": "Attempt",
+          "type": "integer"
+        },
+        "blocked_by": {
+          "anyOf": [
+            {
+              "enum": [
+                "login",
+                "approval",
+                "person",
+                "budget"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Blocked By"
+        },
+        "detail": {
+          "default": "",
+          "title": "Detail",
+          "type": "string"
+        },
+        "ending": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LeadEndingKind"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "findings": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Findings"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "model_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model Ref"
+        },
+        "outcome": {
+          "anyOf": [
+            {
+              "enum": [
+                "done",
+                "partial",
+                "blocked",
+                "failed"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Outcome"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "state": {
+          "$ref": "#/$defs/StepState"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string"
+        },
+        "type": {
+          "const": "step.state",
+          "default": "step.state",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq",
+        "state"
+      ],
+      "title": "StepStateChanged",
+      "type": "object"
+    },
+    "TaskBudgetSet": {
+      "description": "Someone set the task's USD ceiling (B3) - the answer a \"Budget reached\" gate asks for. The\ngate is resolved separately: its accept resumes the parked wave, and the next boundary checks\nthe budget again.",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "previous_usd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Previous Usd"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "task.budget_set",
+          "default": "task.budget_set",
+          "title": "Type",
+          "type": "string"
+        },
+        "usd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Usd"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq",
+        "usd"
+      ],
+      "title": "TaskBudgetSet",
+      "type": "object"
+    },
+    "TaskCancelled": {
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "reason": {
+          "default": "",
+          "title": "Reason",
+          "type": "string"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "task.cancelled",
+          "default": "task.cancelled",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq"
+      ],
+      "title": "TaskCancelled",
+      "type": "object"
+    },
+    "TaskClarifying": {
+      "description": "At most once, before planning.",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "gate_id": {
+          "format": "uuid",
+          "title": "Gate Id",
+          "type": "string"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "task.clarifying",
+          "default": "task.clarifying",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq",
+        "gate_id"
+      ],
+      "title": "TaskClarifying",
+      "type": "object"
+    },
+    "TaskContinued": {
+      "description": "A settled task accepted a new user message and re-entered planning - same row, same\nrecord, same stream, next turn. The follow-up IS the task continuing; it is\nnever a new task. This frame doubles as the status signal (the row is `planning` the\nmoment it lands, the way `task.delivered` implies `delivered`).",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "attached": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Attached"
+        },
+        "budget_after": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Budget After"
+        },
+        "budget_before": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Budget Before"
+        },
+        "client_token": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Client Token"
+        },
+        "credential": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CredKind"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "deliverable": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Deliverable"
+        },
+        "deliverable_format": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Deliverable Format"
+        },
+        "epoch": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Epoch"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "scale": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scale"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "target_pages": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Pages"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "turn": {
+          "title": "Turn",
+          "type": "integer"
+        },
+        "type": {
+          "const": "task.continued",
+          "default": "task.continued",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq",
+        "message",
+        "turn"
+      ],
+      "title": "TaskContinued",
+      "type": "object"
+    },
+    "TaskCreated": {
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "connectors_auto": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Connectors Auto",
+          "type": "array"
+        },
+        "credential": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CredKind"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "goal": {
+          "title": "Goal",
+          "type": "string"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "mode": {
+          "$ref": "#/$defs/TaskMode"
+        },
+        "parent_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Seq"
+        },
+        "parent_task_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Task Id"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "task.created",
+          "default": "task.created",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq",
+        "goal",
+        "mode"
+      ],
+      "title": "TaskCreated",
+      "type": "object"
+    },
+    "TaskDelivered": {
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "artifact_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "title": "Artifact Ids",
+          "type": "array"
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "ending": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TaskEnding"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "summary": {
+          "title": "Summary",
+          "type": "string"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "task.delivered",
+          "default": "task.delivered",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq",
+        "summary"
+      ],
+      "title": "TaskDelivered",
+      "type": "object"
+    },
+    "TaskDequeued": {
+      "description": "The worker took the turn's workflow off the queue: created/continued \u2192 dequeued is queue hop 1.",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "turn": {
+          "default": 1,
+          "title": "Turn",
+          "type": "integer"
+        },
+        "type": {
+          "const": "task.dequeued",
+          "default": "task.dequeued",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq"
+      ],
+      "title": "TaskDequeued",
+      "type": "object"
+    },
+    "TaskEnding": {
+      "description": "What a settled turn's answer says it did, beside its status: `delivered` reads `done`, `partial`, or\n`could_not` when the Lead's answer declined; `failed` reads `could_not` when an agent answered that it\ncould not do the work.",
+      "enum": [
+        "done",
+        "partial",
+        "could_not"
+      ],
+      "title": "TaskEnding",
+      "type": "string"
+    },
+    "TaskFeedback": {
+      "description": "The user graded a turn: thumbs up or down on the answer they were given.\nAppend-only like every judgment in the record - a changed mind is a second frame, and the\nnewest one is the turn's current mood. Never machine state; purely the human's verdict,\nkept where provenance lives (the actor rides the envelope).",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "rating": {
+          "enum": [
+            "up",
+            "down"
+          ],
+          "title": "Rating",
+          "type": "string"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "turn": {
+          "default": 1,
+          "title": "Turn",
+          "type": "integer"
+        },
+        "type": {
+          "const": "task.feedback",
+          "default": "task.feedback",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq",
+        "rating"
+      ],
+      "title": "TaskFeedback",
+      "type": "object"
+    },
+    "TaskMode": {
+      "enum": [
+        "standard",
+        "fleet",
+        "council"
+      ],
+      "title": "TaskMode",
+      "type": "string"
+    },
+    "TaskMoved": {
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "from_project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "From Project Id"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "to_project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "To Project Id"
+        },
+        "type": {
+          "const": "task.moved",
+          "default": "task.moved",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq"
+      ],
+      "title": "TaskMoved",
+      "type": "object"
+    },
+    "TaskPlanned": {
+      "description": "The routed record rides here (zero new wire kinds): each turn's lane, the clause that chose it,\nthe reason, its Machine need (None before the field), and a failed planner's fallback.",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "fallback": {
+          "default": "",
+          "title": "Fallback",
+          "type": "string"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "machine": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MachineNeed"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "machine_why": {
+          "default": "",
+          "title": "Machine Why",
+          "type": "string"
+        },
+        "plan": {
+          "$ref": "#/$defs/PlanView"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "route": {
+          "default": "standard",
+          "title": "Route",
+          "type": "string"
+        },
+        "route_source": {
+          "default": "planner",
+          "description": "dial|detector|anchor|hatch|planner|lead",
+          "title": "Route Source",
+          "type": "string"
+        },
+        "route_why": {
+          "default": "",
+          "title": "Route Why",
+          "type": "string"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "task.planned",
+          "default": "task.planned",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq",
+        "plan"
+      ],
+      "title": "TaskPlanned",
+      "type": "object"
+    },
+    "TaskProposed": {
+      "description": "The Lead proposed WORK (the card under its reply): Start is a follow-up with the deliverable dials\nset, Not now is nothing - consent is a tap, never the model's. Nothing executes on this frame.",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "deliverable": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Deliverable"
+        },
+        "deliverable_format": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DocumentFormat"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "goal": {
+          "title": "Goal",
+          "type": "string"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "turn": {
+          "default": 1,
+          "title": "Turn",
+          "type": "integer"
+        },
+        "type": {
+          "const": "task.proposed",
+          "default": "task.proposed",
+          "title": "Type",
+          "type": "string"
+        },
+        "why": {
+          "default": "",
+          "title": "Why",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq",
+        "goal"
+      ],
+      "title": "TaskProposed",
+      "type": "object"
+    },
+    "TaskRenamed": {
+      "description": "A label change, not a state transition - the record keeps every name the work wore.",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "type": {
+          "const": "task.renamed",
+          "default": "task.renamed",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq",
+        "title"
+      ],
+      "title": "TaskRenamed",
+      "type": "object"
+    },
+    "TaskStatus": {
+      "description": "The task machine.",
+      "enum": [
+        "created",
+        "clarifying",
+        "planning",
+        "running",
+        "waiting",
+        "paused",
+        "delivered",
+        "failed",
+        "cancelled"
+      ],
+      "title": "TaskStatus",
+      "type": "string"
+    },
+    "TaskStatusChanged": {
+      "description": "paused / resumed / running / waiting / failed - one event, the status is the payload.",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "ending": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TaskEnding"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "reason": {
+          "default": "",
+          "title": "Reason",
+          "type": "string"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "status": {
+          "$ref": "#/$defs/TaskStatus"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "summary": {
+          "default": "",
+          "title": "Summary",
+          "type": "string"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "task.status",
+          "default": "task.status",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq",
+        "status"
+      ],
+      "title": "TaskStatusChanged",
+      "type": "object"
+    },
+    "TimeoutPolicy": {
+      "enum": [
+        "proceed_with_defaults",
+        "wait",
+        "cancel"
+      ],
+      "title": "TimeoutPolicy",
+      "type": "string"
+    },
+    "ToolCalled": {
+      "description": "The journal. Every `exec` in a frame lands here - including the ones that were refused,\nwhich is how an egress denial is *visible* rather than mysterious.",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "attempt": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Attempt"
+        },
+        "denied_reason": {
+          "default": "",
+          "title": "Denied Reason",
+          "type": "string"
+        },
+        "duration_ms": {
+          "default": 0,
+          "title": "Duration Ms",
+          "type": "integer"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "ok": {
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ref"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "summary": {
+          "default": "",
+          "title": "Summary",
+          "type": "string"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "tool": {
+          "title": "Tool",
+          "type": "string"
+        },
+        "tool_call_id": {
+          "default": "",
+          "title": "Tool Call Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "tool.called",
+          "default": "tool.called",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq",
+        "tool",
+        "ok"
+      ],
+      "title": "ToolCalled",
+      "type": "object"
+    },
+    "Unit": {
+      "description": "Native units. Providers bill in these; we never invent a synthetic 'token'.",
+      "enum": [
+        "input_token",
+        "output_token",
+        "cache_read_token",
+        "cache_write_token",
+        "cache_write_1h_token",
+        "flex_input_token",
+        "flex_output_token",
+        "flex_cache_read_token",
+        "reasoning_token",
+        "request",
+        "image",
+        "second",
+        "character",
+        "search"
+      ],
+      "title": "Unit",
+      "type": "string"
+    },
+    "UsageRecorded": {
+      "description": "Every provider call, on the stream and on the ledger. No metering, no merge.",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "cost_usd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Cost Usd"
+        },
+        "family": {
+          "title": "Family",
+          "type": "string"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "provider": {
+          "title": "Provider",
+          "type": "string"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "usage.recorded",
+          "default": "usage.recorded",
+          "title": "Type",
+          "type": "string"
+        },
+        "units": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "propertyNames": {
+            "$ref": "#/$defs/Unit"
+          },
+          "title": "Units",
+          "type": "object"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq",
+        "provider",
+        "model",
+        "family",
+        "units",
+        "cost_usd"
+      ],
+      "title": "UsageRecorded",
+      "type": "object"
+    },
+    "Verdict": {
+      "enum": [
+        "pass",
+        "fail",
+        "unverified"
+      ],
+      "title": "Verdict",
+      "type": "string"
+    },
+    "VerificationSigned": {
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "artifact_id": {
+          "format": "uuid",
+          "title": "Artifact Id",
+          "type": "string"
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "lane": {
+          "const": "record",
+          "default": "record",
+          "title": "Lane",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "signature": {
+          "title": "Signature",
+          "type": "string"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "suite": {
+          "$ref": "#/$defs/VerifierSuite"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "verification.signed",
+          "default": "verification.signed",
+          "title": "Type",
+          "type": "string"
+        },
+        "verdict": {
+          "$ref": "#/$defs/Verdict"
+        },
+        "verifier_family": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Verifier Family"
+        }
+      },
+      "required": [
+        "task_id",
+        "at",
+        "seq",
+        "artifact_id",
+        "verdict",
+        "suite",
+        "signature"
+      ],
+      "title": "VerificationSigned",
+      "type": "object"
+    },
+    "VerifierSuite": {
+      "description": "Named suites. Each is a pipeline in `ai/verification/` - deterministic, then judged.",
+      "enum": [
+        "document-suite",
+        "spreadsheet-suite",
+        "deck-suite",
+        "code-suite",
+        "dataset-suite",
+        "collection-suite",
+        "fleet-suite",
+        "council-suite",
+        "image-suite",
+        "recording-suite",
+        "change-suite"
+      ],
+      "title": "VerifierSuite",
+      "type": "string"
+    }
+  },
+  "discriminator": {
+    "mapping": {
+      "activity": "#/$defs/Activity",
+      "artifact.delta": "#/$defs/ArtifactDelta",
+      "artifact.produced": "#/$defs/ArtifactProduced",
+      "artifact.revised": "#/$defs/ArtifactRevised",
+      "artifact.snapshot": "#/$defs/ArtifactSnapshot",
+      "bot_memory.written": "#/$defs/BotMemoryWritten",
+      "context.assembled": "#/$defs/ContextAssembled",
+      "escalation.raised": "#/$defs/EscalationRaised",
+      "gate.opened": "#/$defs/GateOpened",
+      "gate.resolved": "#/$defs/GateResolved",
+      "machine.control_claimed": "#/$defs/MachineControlClaimed",
+      "machine.control_ended": "#/$defs/MachineControlEnded",
+      "machine.created": "#/$defs/MachineCreated",
+      "machine.rebuilt": "#/$defs/MachineRebuilt",
+      "machine.reset": "#/$defs/MachineReset",
+      "machine.slept": "#/$defs/MachineSlept",
+      "machine.woke": "#/$defs/MachineWoke",
+      "memory.written": "#/$defs/MemoryWritten",
+      "message.delta": "#/$defs/MessageDelta",
+      "message.end": "#/$defs/MessageEnd",
+      "message.start": "#/$defs/MessageStart",
+      "pause.applied": "#/$defs/PauseApplied",
+      "plan.edited": "#/$defs/PlanEdited",
+      "presence.here": "#/$defs/PresenceHere",
+      "presence.join": "#/$defs/PresenceJoin",
+      "presence.leave": "#/$defs/PresenceLeave",
+      "presence.typing": "#/$defs/PresenceTyping",
+      "progress": "#/$defs/Progress",
+      "qa.reviewed": "#/$defs/QAReviewed",
+      "screen.action": "#/$defs/ScreenAction",
+      "screen.state": "#/$defs/ScreenState",
+      "steer.applied": "#/$defs/SteerApplied",
+      "steer.rejected": "#/$defs/SteerRejected",
+      "steer.retracted": "#/$defs/SteerRetracted",
+      "step.dequeued": "#/$defs/StepDequeued",
+      "step.narration": "#/$defs/StepNarration",
+      "step.prompt": "#/$defs/StepPrompt",
+      "step.state": "#/$defs/StepStateChanged",
+      "task.budget_set": "#/$defs/TaskBudgetSet",
+      "task.cancelled": "#/$defs/TaskCancelled",
+      "task.clarifying": "#/$defs/TaskClarifying",
+      "task.continued": "#/$defs/TaskContinued",
+      "task.created": "#/$defs/TaskCreated",
+      "task.delivered": "#/$defs/TaskDelivered",
+      "task.dequeued": "#/$defs/TaskDequeued",
+      "task.feedback": "#/$defs/TaskFeedback",
+      "task.moved": "#/$defs/TaskMoved",
+      "task.planned": "#/$defs/TaskPlanned",
+      "task.proposed": "#/$defs/TaskProposed",
+      "task.renamed": "#/$defs/TaskRenamed",
+      "task.status": "#/$defs/TaskStatusChanged",
+      "tool.called": "#/$defs/ToolCalled",
+      "usage.recorded": "#/$defs/UsageRecorded",
+      "verification.signed": "#/$defs/VerificationSigned"
+    },
+    "propertyName": "type"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/TaskCreated"
+    },
+    {
+      "$ref": "#/$defs/TaskClarifying"
+    },
+    {
+      "$ref": "#/$defs/TaskPlanned"
+    },
+    {
+      "$ref": "#/$defs/TaskStatusChanged"
+    },
+    {
+      "$ref": "#/$defs/TaskDequeued"
+    },
+    {
+      "$ref": "#/$defs/StepDequeued"
+    },
+    {
+      "$ref": "#/$defs/TaskMoved"
+    },
+    {
+      "$ref": "#/$defs/TaskBudgetSet"
+    },
+    {
+      "$ref": "#/$defs/MachineCreated"
+    },
+    {
+      "$ref": "#/$defs/MachineSlept"
+    },
+    {
+      "$ref": "#/$defs/MachineWoke"
+    },
+    {
+      "$ref": "#/$defs/MachineRebuilt"
+    },
+    {
+      "$ref": "#/$defs/MachineReset"
+    },
+    {
+      "$ref": "#/$defs/MachineControlClaimed"
+    },
+    {
+      "$ref": "#/$defs/MachineControlEnded"
+    },
+    {
+      "$ref": "#/$defs/TaskRenamed"
+    },
+    {
+      "$ref": "#/$defs/TaskCancelled"
+    },
+    {
+      "$ref": "#/$defs/TaskDelivered"
+    },
+    {
+      "$ref": "#/$defs/TaskContinued"
+    },
+    {
+      "$ref": "#/$defs/TaskProposed"
+    },
+    {
+      "$ref": "#/$defs/TaskFeedback"
+    },
+    {
+      "$ref": "#/$defs/PlanEdited"
+    },
+    {
+      "$ref": "#/$defs/SteerApplied"
+    },
+    {
+      "$ref": "#/$defs/SteerRejected"
+    },
+    {
+      "$ref": "#/$defs/SteerRetracted"
+    },
+    {
+      "$ref": "#/$defs/PauseApplied"
+    },
+    {
+      "$ref": "#/$defs/StepStateChanged"
+    },
+    {
+      "$ref": "#/$defs/StepNarration"
+    },
+    {
+      "$ref": "#/$defs/StepPrompt"
+    },
+    {
+      "$ref": "#/$defs/ToolCalled"
+    },
+    {
+      "$ref": "#/$defs/GateOpened"
+    },
+    {
+      "$ref": "#/$defs/GateResolved"
+    },
+    {
+      "$ref": "#/$defs/UsageRecorded"
+    },
+    {
+      "$ref": "#/$defs/ArtifactProduced"
+    },
+    {
+      "$ref": "#/$defs/ArtifactRevised"
+    },
+    {
+      "$ref": "#/$defs/ArtifactSnapshot"
+    },
+    {
+      "$ref": "#/$defs/VerificationSigned"
+    },
+    {
+      "$ref": "#/$defs/QAReviewed"
+    },
+    {
+      "$ref": "#/$defs/EscalationRaised"
+    },
+    {
+      "$ref": "#/$defs/ContextAssembled"
+    },
+    {
+      "$ref": "#/$defs/MemoryWritten"
+    },
+    {
+      "$ref": "#/$defs/BotMemoryWritten"
+    },
+    {
+      "$ref": "#/$defs/MessageStart"
+    },
+    {
+      "$ref": "#/$defs/MessageDelta"
+    },
+    {
+      "$ref": "#/$defs/MessageEnd"
+    },
+    {
+      "$ref": "#/$defs/ArtifactDelta"
+    },
+    {
+      "$ref": "#/$defs/Progress"
+    },
+    {
+      "$ref": "#/$defs/Activity"
+    },
+    {
+      "$ref": "#/$defs/PresenceJoin"
+    },
+    {
+      "$ref": "#/$defs/PresenceLeave"
+    },
+    {
+      "$ref": "#/$defs/PresenceHere"
+    },
+    {
+      "$ref": "#/$defs/PresenceTyping"
+    },
+    {
+      "$ref": "#/$defs/ScreenState"
+    },
+    {
+      "$ref": "#/$defs/ScreenAction"
+    }
+  ]
+}

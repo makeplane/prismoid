@@ -1,0 +1,27 @@
+{
+  "scenario": "steer_after_acting_is_refused",
+  "outcome": "delivered",
+  "loose": {"task.renamed": 1},
+  "facts": {"people": [{"did": "steer", "by": "owner", "answer": "accepted", "epoch": 2}]},
+  "record": [
+    {"type": "task.created", "mode": "standard"},
+    {"type": "task.dequeued", "turn": 1},
+    {"type": "task.status", "status": "planning"},
+    {"type": "task.planned", "route": "standard", "route_source": "dial", "steps": [{"id": "s1", "agent": "maker", "kind": "step"}], "machine": "computer"},
+    {"type": "task.status", "status": "running"},
+    {"type": "step.dequeued", "step": "s1"},
+    {"type": "step.state", "step": "s1", "state": "running", "agent": "maker", "attempt": 1},
+    {"type": "machine.created", "profile": "code"},
+    {"type": "step.prompt", "step": "s1", "agent": "maker", "attempt": 1},
+    {"type": "tool.called", "step": "s1", "tool": "frame.shell", "ok": true, "attempt": 1},
+    {"type": "tool.called", "step": "s1", "tool": "frame.write_file", "ok": true, "attempt": 1},
+    {"type": "tool.called", "step": "s1", "tool": "frame.publish", "ok": true, "attempt": 1},
+    {"type": "plan.edited", "edit.kind": "steer"},
+    {"type": "artifact.produced", "step": "s1", "artifact_type": "code", "role": "deliverable"},
+    {"type": "step.narration", "step": "s1"},
+    {"type": "step.state", "step": "s1", "state": "done", "agent": "maker", "attempt": 1},
+    {"type": "steer.rejected"},
+    {"type": "task.delivered"},
+    {"type": "memory.written", "count": 0}
+  ]
+}

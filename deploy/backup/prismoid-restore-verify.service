@@ -1,0 +1,12 @@
+# Monthly restore drill (deploy/backup/restore_verify.sh). Installed by deploy/backup/install.sh.
+[Unit]
+Description=Prismoid monthly restore-verify (restic restore + pg_restore into scratch)
+Wants=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/prismoid-backup.env
+ExecStart=/srv/prismoid/deploy/backup/restore_verify.sh
+Nice=10
+IOSchedulingClass=idle

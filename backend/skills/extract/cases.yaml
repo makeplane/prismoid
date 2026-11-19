@@ -1,0 +1,7 @@
+routing:
+  - goal: "extract all the dates and amounts from this contract"
+    expect: extract
+  - goal: "pull the line items into a table from this invoice"
+    expect: extract
+  - goal: "get me the names and titles mentioned in this doc"
+    expect: extract

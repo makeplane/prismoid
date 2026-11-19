@@ -1,0 +1,7 @@
+routing:
+  - goal: "research the attached filings and pull out the key numbers"
+    expect: research
+  - goal: "read these six documents and tell me what they say"
+    expect: research
+  - goal: "gather the findings from this brief before I write the memo"
+    expect: research

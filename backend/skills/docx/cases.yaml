@@ -1,0 +1,7 @@
+routing:
+  - goal: "write up this analysis as a Word document"
+    expect: docx
+  - goal: "draft the client proposal as a .docx with headings and a pricing table"
+    expect: docx
+  - goal: "turn these notes into a formatted Word report I can edit later"
+    expect: docx

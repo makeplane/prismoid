@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/makeplane/prismoid/security/advisories/new
+    about: Never open a public issue for a security problem. Follow SECURITY.md and report it privately.
+  - name: Security policy (SECURITY.md)
+    url: https://github.com/makeplane/prismoid/blob/main/SECURITY.md
+    about: How to report, what to include, and the response targets.

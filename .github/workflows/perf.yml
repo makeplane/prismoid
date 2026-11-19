@@ -1,0 +1,66 @@
+# Nightly performance gate. The §15 budgets are requirements; this is what enforces them,
+# and it fails on a >20% p95 regression against the committed baseline — catching a creeping slowdown
+# before it reaches the absolute ceiling.
+#
+# Like the other model-calling workflows, it needs secrets (a warmed run needs a seeded DB and
+# a login). The baseline lives at backend/tests/perf/baseline.json; re-record it deliberately with
+# PRISMOID_PERF_RECORD=1 and commit the diff — a baseline that moves silently is not a baseline.
+
+name: Nightly perf gate
+
+on:
+  schedule:
+    - cron: "0 5 * * *"   # 05:00 UTC nightly
+  workflow_dispatch:
+
+concurrency:
+  group: perf
+  cancel-in-progress: true
+
+jobs:
+  budgets:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend   # the service dir (ADR-007)
+    env:
+      PRISMOID_CLI_API_URL: http://localhost:8111
+      PRISMOID_PERF_BASELINE_PATH: tests/perf/baseline.json   # resolved from backend/ (ADR-007)
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+
+      # uvx --from rust-just: the runner image ships no `just` binary; rust-just runs it without PATH ceremony.
+      - name: Bring up the stack + migrate + seed
+        run: |
+          docker compose -f deploy/compose.yaml up -d --wait
+          docker compose -f deploy/compose.yaml run --rm minio-init
+          uv sync --frozen
+          uvx --from rust-just just migrate
+          uv run prismoid models seed
+
+      # The worker first: its first start creates the durable engine's database, which the API needs to boot.
+      # The gate measures the API alone, so the worker stops once it is ready.
+      - name: Start the API
+        run: |
+          .venv/bin/prismoid run worker > worker.log 2>&1 &
+          for _ in $(seq 1 90); do if grep -q "worker ready" worker.log; then break; fi; sleep 2; done
+          grep -q "worker ready" worker.log || { cat worker.log; exit 1; }
+          pkill -f "prismoid run worker"
+          uv run prismoid run api --port 8111 > api.log 2>&1 &
+          for _ in $(seq 1 60); do if curl -sf http://localhost:8111/healthz; then break; fi; sleep 2; done
+          curl -sf http://localhost:8111/healthz || { cat api.log; exit 1; }
+
+      # Signup is a call to the API, so it comes after the API is up.
+      - name: Create a user + token (the perf harness reads ~/.prismoid/credentials)
+        run: |
+          uv run prismoid login --signup --email perf@example.com --name Perf \
+            --password "${{ secrets.CI_USER_PASSWORD || 'correct horse battery staple' }}"
+
+      - name: Run the perf gate (budgets + >20% regression vs baseline)
+        run: uvx --from rust-just just perf

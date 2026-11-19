@@ -1,0 +1,116 @@
+# Dependency updates, once a week, grouped so a week's churn is a handful of PRs, not dozens.
+# Minor and patch bumps of one toolchain land as one PR; a major bump gets a PR of its own, since
+# it is the one that can break something. Security updates are not limited by these groups or caps.
+# Runtimes never move by an automated bump: a new Postgres major cannot open an old data volume, and
+# the Python, Go and Node versions move together with the toolchain dev and CI use, as one change.
+# Docker tags look like semver to Dependabot, so Python 3.12 -> 3.15 or Go 1.26 -> 1.27 would ride a
+# "minor-patch" group; the ignore rules below keep those groups to patches and digests.
+version: 2
+
+updates:
+  # The API and worker (backend/pyproject.toml + uv.lock).
+  - package-ecosystem: uv
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "build(deps)"
+    groups:
+      python-minor-patch:
+        update-types: [minor, patch]
+
+  # The pnpm workspace at the root: web/, packages/ and the shared catalog (pnpm-lock.yaml).
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "build(deps)"
+    groups:
+      # vitest and its plugins share a major: they move together or not at all. coverage-v8 is named
+      # on its own because the glob alone let vitest 5 ship without it.
+      vitest:
+        patterns: ["vitest", "@vitest/coverage-v8", "@vitest/*"]
+      web-minor-patch:
+        update-types: [minor, patch]
+    ignore:
+      # mermaid 12 pulls in elkjs 0.9.3, EPL-2.0 with no GPL secondary license: not AGPL-compatible.
+      - dependency-name: mermaid
+        update-types: ["version-update:semver-major"]
+      # Node 22 is the runtime everywhere, so its types stay on 22.
+      - dependency-name: "@types/node"
+        versions: [">=23"]
+
+  # sandbar, its own Go module (standard library and golang.org/x/sys only).
+  - package-ecosystem: gomod
+    directory: /sandbar
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "build(deps)"
+    groups:
+      go-minor-patch:
+        update-types: [minor, patch]
+
+  # Base images, pinned by digest in every Dockerfile: Dependabot moves the digest and the tag.
+  - package-ecosystem: docker
+    directories:
+      - /backend
+      - /web
+      - /sandbar
+      - /backend/prismoid/ai/frames/image
+      - /backend/prismoid/ai/frames/image_browser
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "build(deps)"
+    groups:
+      docker-minor-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: python
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: golang
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
+
+  # Third-party images the compose files run (Postgres, Caddy, the dev egress proxy's Python).
+  - package-ecosystem: docker-compose
+    directories:
+      - /deploy
+      - /backend/deploy
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "build(deps)"
+    groups:
+      compose-minor-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: postgres
+        update-types: ["version-update:semver-major"]
+      - dependency-name: python
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "ci(deps)"
+    groups:
+      actions:
+        patterns: ["*"]

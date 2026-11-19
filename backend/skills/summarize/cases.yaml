@@ -1,0 +1,7 @@
+routing:
+  - goal: "summarise this document in a few bullet points"
+    expect: summarize
+  - goal: "give me the TL;DR of this report"
+    expect: summarize
+  - goal: "condense this into an executive summary"
+    expect: summarize

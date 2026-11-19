@@ -1,0 +1,5 @@
+routing:
+  - goal: "lay the fleet's answers side by side in one table, one row per model"
+    expect: fleet-table
+  - goal: "compare what each model answered to the same question without picking a winner"
+    expect: fleet-table

@@ -1,0 +1,371 @@
+# A starter cloud catalog for a fresh deployment - what `prismoid models seed` adds so the first
+# task can route (adding a model is DATA, not a deploy - this file is that data, kept out of
+# code so the audit stays clean). Edit it, or point `prismoid models seed --file …` at your own,
+# to run exactly the models you want.
+#
+# TWO caveats, both load-bearing:
+#   • PRICES ARE POINT-IN-TIME: the Claude rows were captured 2026-10 (re-checked against
+#     platform.claude.com's pricing page; Haiku 5.5 on 2026-11-06), the others 2026-07. Verify them against your provider's
+#     current pricing before you trust the ledger - an out-of-date price under-counts spend silently.
+#   • Each model needs its provider's key in your deploy/.env (ANTHROPIC/OPENAI/GOOGLE_API_KEY),
+#     or the model is enabled but cannot serve: a provider that refuses to be built without its
+#     key is skipped (its class falls to the next row), and one that builds fails every call.
+#
+# Prices are per SINGLE token (the CLI's `--price …/M` sugar is for humans; here it is the raw
+# unit the ledger multiplies).
+
+models:
+  - provider: anthropic
+    model_id: claude-opus-5-5
+    family: anthropic
+    protocol: anthropic
+    classes: [frontier-reasoner, judge, long-context, vision]
+    context: 1000000
+    enabled: true
+    prices:
+      input_token: 0.000004
+      output_token: 0.00002
+      cache_read_token: 0.0000002
+      cache_write_token: 0.000005
+      cache_write_1h_token: 0.000008
+
+  # The current Haiku: the cheap-classifier lead and the fast-executor's third seat. Anthropic bills
+  # two cards by prompt length - $0.10/$0.50 per MTok up to a 100K-token prompt, $0.50/$2.50
+  # above - and a row carries one price per unit, so this is the short card: the classifier
+  # prompts it leads are short, and a long prompt is under-counted until the ledger learns tiered
+  # prices.
+  - provider: anthropic
+    model_id: claude-haiku-5-5
+    family: anthropic
+    protocol: anthropic
+    classes: [fast-executor, cheap-classifier, decider, vision]
+    context: 1000000
+    enabled: true
+    prices:
+      input_token: 0.0000001
+      output_token: 0.0000005
+      cache_read_token: 0.00000001
+      cache_write_token: 0.000000125
+      cache_write_1h_token: 0.0000002
+
+  # Out of every general chain (Haiku 5.5 is cheaper and newer); kept as a priced row for a
+  # cheap-decision class to fall back on. No class until one asks for it.
+  - provider: anthropic
+    model_id: claude-haiku-4-5
+    family: anthropic
+    protocol: anthropic
+    classes: []
+    context: 200000
+    enabled: true
+    prices:
+      input_token: 0.000001
+      output_token: 0.000005
+      cache_read_token: 0.0000001
+      cache_write_token: 0.00000125
+      cache_write_1h_token: 0.000002
+
+  # The navigator's seat and the catalog's code model (coding work at roughly half Opus's
+  # cost): Sonnet-class, strong tool use + vision, 1M context.
+  - provider: anthropic
+    model_id: claude-sonnet-5-5
+    family: anthropic
+    protocol: anthropic
+    classes: [fast-executor, frontier-executor, code, vision, computer-use]
+    context: 1000000
+    enabled: true
+    prices:
+      input_token: 0.000002
+      output_token: 0.00001
+      cache_read_token: 0.0000001
+      cache_write_token: 0.0000025
+      cache_write_1h_token: 0.000004
+
+  # A different FAMILY, on purpose: cross-family verification needs a judge that is not the
+  # producer's family. With only Anthropic above, nothing could verify an Anthropic-written doc.
+  - provider: google
+    model_id: gemini-flash-lite-latest
+    family: google
+    protocol: google
+    classes: [judge]
+    context: 1000000
+    enabled: true
+    prices:
+      input_token: 0.0000001
+      output_token: 0.0000004
+
+  # A second AUTHOR family: with only Anthropic serving
+  # the executor classes, an Anthropic billing/outage day left the product with zero models
+  # that could write - every task failed at "no model could take the call". Provider breadth
+  # for authors is the same law as cross-family judging: one family down must cost latency,
+  # never the answer. `judge` too: flash-lite was the ONLY non-Anthropic judge,
+  # so the cheapest model in the catalog graded everything Anthropic wrote - flash heads the
+  # class and lite stays the fallback. A pinned id, not the `-latest` alias: an alias swaps the model
+  # and its price under a running ledger. Prices from Google's paid-tier card, 2026-11-14; they
+  # double on 2027-01-01 (input $1.50, output $7.50, cached $0.15 per MTok, flex half of each):
+  # reprice then with `prismoid models import --reprice`.
+  - provider: google
+    model_id: gemini-3.8-flash
+    family: google
+    protocol: google
+    classes: [fast-executor, cheap-classifier, decider, judge, computer-use, vision, long-context]
+    context: 1000000
+    enabled: true
+    prices:
+      input_token: 0.00000075
+      output_token: 0.00000375
+      cache_read_token: 0.000000075
+      flex_input_token: 0.000000375
+      flex_output_token: 0.000001875
+      flex_cache_read_token: 0.0000000375
+
+  # The alias the pinned row above replaced: no class, so a re-seed takes the classes an earlier
+  # starter gave it off an untouched deployment.
+  - provider: google
+    model_id: gemini-flash-latest
+    family: google
+    protocol: google
+    classes: []
+    context: 1000000
+    enabled: true
+    prices:
+      input_token: 0.0000003
+      output_token: 0.0000025
+
+  # The decider's lead: the cheapest OpenAI model, for one-shot decisions only. Id, 1.05M context
+  # and prices from OpenAI's model page, 2026-11-14 (a prompt over 272K tokens bills more; a
+  # decision prompt is short).
+  - provider: openai
+    model_id: gpt-6-luna
+    family: openai
+    protocol: openai
+    classes: [decider]
+    context: 1050000
+    enabled: true
+    prices:
+      input_token: 0.0000001
+      output_token: 0.0000005
+      cache_read_token: 0.00000001
+      flex_input_token: 0.00000005
+      flex_output_token: 0.00000025
+      flex_cache_read_token: 0.000000005
+
+  # The cross-family failover for computer use, and the second family behind Opus and Sonnet for
+  # the reasoning, long-context and code classes. Id from models.dev, 2026-09-28; prices (the
+  # cache write too) from OpenAI's pricing page, 2026-11-14.
+  - provider: openai
+    model_id: gpt-6-sol
+    family: openai
+    protocol: openai
+    classes: [computer-use, frontier-executor, frontier-reasoner, long-context, code]
+    context: 1050000
+    enabled: true
+    prices:
+      input_token: 0.000002
+      output_token: 0.00001
+      cache_read_token: 0.0000002
+      cache_write_token: 0.0000025
+      flex_input_token: 0.000001
+      flex_output_token: 0.000005
+      flex_cache_read_token: 0.0000001
+
+  # ── The media lane: image models are catalog rows like any other - priced in
+  # Unit.IMAGE, enabled/disabled/routed the same way - but SERVED by the media tool
+  # (`generate_image`), never as chat seats. Prices are flat per-image approximations of
+  # token-billed reality - VERIFY against current provider pricing (the caveat at the top of
+  # this file is doing real work here).
+
+  # The 2026 quality/text-rendering leader. `openai_images` = the OpenAI Images wire.
+  - provider: openai
+    model_id: gpt-image-1.5
+    family: openai
+    protocol: openai_images
+    classes: [image-gen]
+    context: 0
+    enabled: true
+    prices:
+      image: 0.05
+
+  # xAI speaks the same Images wire - a base_url row, zero code. The
+  # economy lane: the quality dial or a routing chain picks between this and gpt-image.
+  # (model id corrected from `grok-imagine`, which 404s;
+  # a running deploy re-seeds with `prismoid models seed`.)
+  - provider: xai
+    model_id: grok-2-image
+    family: xai
+    protocol: openai_images
+    base_url: https://api.x.ai/v1
+    classes: [image-gen]
+    context: 0
+    enabled: true
+    prices:
+      image: 0.02
+
+  # Imagen, present but DISABLED (ChatGPT image + Grok lead) - one
+  # `prismoid models enable google:imagen-4-fast` away when wanted.
+  - provider: google
+    model_id: imagen-4-fast
+    family: google
+    protocol: google_images
+    classes: [image-gen]
+    context: 0
+    enabled: false
+    prices:
+      image: 0.02
+
+  # ── Baseten's shared Model APIs: two cheap OpenAI-compatible rows (§9 T2 - no code, just these
+  # rows and `PRISMOID_GATEWAY_BASETEN_API_KEY` in .env or the process env). One provider, two
+  # FAMILIES: the family is the model's maker, never the host, so DeepSeek can judge GLM's work
+  # cross-family. Disabled here because a keyless OpenAI-compatible row still builds (a local
+  # Ollama needs no key) and would 401 every call it took - set the key, then
+  # `prismoid models enable <ref>`. Both multimodal with a 1M context; Baseten's own output default
+  # is 4,096 tokens, which the gateway's 16k ceiling (`default_model_settings`) overrides. Prices
+  # from Baseten's /v1/models book, 2026-11-01.
+  - provider: baseten
+    model_id: zai-org/GLM-5.3-Flash
+    family: zhipu
+    protocol: openai_compatible
+    base_url: https://inference.baseten.co/v1
+    classes: [fast-executor, cheap-classifier, judge, vision]
+    context: 1048576
+    enabled: false
+    prices:
+      input_token: 0.00000015
+      output_token: 0.0000005
+      cache_read_token: 0.00000003
+
+  - provider: baseten
+    model_id: deepseek-ai/DeepSeek-V4.1-Flash-1017
+    family: deepseek
+    protocol: openai_compatible
+    base_url: https://inference.baseten.co/v1
+    classes: [fast-executor, cheap-classifier, judge, vision]
+    context: 1048576
+    enabled: false
+    prices:
+      input_token: 0.0000003
+      output_token: 0.0000012
+      cache_read_token: 0.000000007
+
+# Routing chains, seeded beside the rows and first-run like them: a class that already has a
+# chain keeps it. EVERY class is chained, so nothing is left to alphabetical order (which once put
+# Haiku 4.5 at the head of fast-executor), and every chain crosses at least two families among the
+# rows enabled above: one provider's outage costs latency, never the answer. The leads: Opus 5.5 for
+# planning, judging and long reading, where the strongest model pays for itself at twice Sonnet's
+# price; Sonnet 5.5 for the tool-using executors and code; Haiku 5.5 for the cheap one-shot
+# classifiers. A guarded step holds one row per step
+# and moves down its chain only when the provider failed; a browser run takes one row per attempt
+# (`attempt_seat`). The Baseten rows sit at the tail of their classes: skipped while disabled, a
+# third family once enabled.
+routing:
+  frontier-reasoner: [anthropic:claude-opus-5-5, openai:gpt-6-sol]
+  long-context: [anthropic:claude-opus-5-5, openai:gpt-6-sol, google:gemini-3.8-flash]
+  code: [anthropic:claude-sonnet-5-5, openai:gpt-6-sol]
+  # Every seat is frontier tier, so a provider outage or a missing key never hands the work to a
+  # cheaper model: Sonnet, then OpenAI's peer.
+  frontier-executor: [anthropic:claude-sonnet-5-5, openai:gpt-6-sol]
+  fast-executor:
+    - anthropic:claude-sonnet-5-5
+    - google:gemini-3.8-flash
+    - anthropic:claude-haiku-5-5
+    - baseten:zai-org/GLM-5.3-Flash
+    - baseten:deepseek-ai/DeepSeek-V4.1-Flash-1017
+  cheap-classifier:
+    - anthropic:claude-haiku-5-5
+    - google:gemini-3.8-flash
+    - baseten:zai-org/GLM-5.3-Flash
+    - baseten:deepseek-ai/DeepSeek-V4.1-Flash-1017
+  judge:
+    - anthropic:claude-opus-5-5
+    - google:gemini-3.8-flash
+    - google:gemini-flash-lite-latest
+    - baseten:deepseek-ai/DeepSeek-V4.1-Flash-1017
+    - baseten:zai-org/GLM-5.3-Flash
+  vision:
+    - anthropic:claude-sonnet-5-5
+    - google:gemini-3.8-flash
+    - anthropic:claude-opus-5-5
+    - anthropic:claude-haiku-5-5
+    - baseten:zai-org/GLM-5.3-Flash
+    - baseten:deepseek-ai/DeepSeek-V4.1-Flash-1017
+  computer-use: [anthropic:claude-sonnet-5-5, openai:gpt-6-sol, google:gemini-3.8-flash]
+  image-gen: [openai:gpt-image-1.5, xai:grok-2-image, google:imagen-4-fast]
+  # A decision model from whichever key the host holds: OpenAI, else Anthropic, else Google.
+  decider: [openai:gpt-6-luna, anthropic:claude-haiku-5-5, google:gemini-3.8-flash]
+
+# How each class is asked: its routing row's `settings`. `effort` is pydantic-ai's unified thinking
+# level (minimal|low|medium|high|xhigh|max), mapped per protocol (Anthropic `output_config.effort`,
+# OpenAI `reasoning.effort`, Gemini `thinking_level`; a model that takes none is sent none). Setting
+# no effort leaves the provider's default, which for Sonnet 5.5 is `high`. Steps work at `medium`;
+# single-call classes answer at `low`. The judge keeps its model's default effort on the standard
+# tier: on the discounted `flex` tier its queue outlasted the judge's wall and receipts went
+# unjudged. A deployment may still set `service_tier: flex` on a class; only a row that prices the
+# `flex_*` units is sent it. Seeded only into a class whose row has no settings yet; an operator's
+# settings are never overwritten (unless they still read as an earlier starter left them, under
+# `superseded.settings`), and a routing PUT carries them forward.
+settings:
+  frontier-reasoner: {effort: medium}
+  long-context: {effort: medium}
+  code: {effort: medium}
+  fast-executor: {effort: medium}
+  frontier-executor: {effort: medium}
+  vision: {effort: medium}
+  computer-use: {effort: medium}
+  cheap-classifier: {effort: low}
+  decider: {effort: low}
+
+# What earlier starters shipped, so a re-seed carries an untouched deployment forward: a row whose
+# classes, or a class whose chain, still reads exactly as an earlier starter left it takes the
+# value above. Anything an operator changed matches nothing here and is never touched. Add the old
+# value here whenever a starter row's classes, a starter chain or a class's settings change.
+superseded:
+  settings:
+    judge:
+      - {service_tier: flex}
+  classes:
+    anthropic:claude-sonnet-5-5:
+      - [fast-executor, code, vision, computer-use]
+    anthropic:claude-haiku-5-5:
+      - [fast-executor, cheap-classifier, vision]
+    google:gemini-3.8-flash:
+      - [fast-executor, cheap-classifier, judge, computer-use, vision, long-context]
+    openai:gpt-6-sol:
+      - [computer-use]
+      - [computer-use, frontier-reasoner, long-context, code]
+    anthropic:claude-haiku-4-5:
+      - [fast-executor, cheap-classifier, vision]
+    google:gemini-flash-latest:
+      - [fast-executor, cheap-classifier, judge, computer-use, vision, long-context]
+      - [fast-executor, cheap-classifier, judge, computer-use]
+  routing:
+    long-context:
+      - [anthropic:claude-opus-5-5, openai:gpt-6-sol, google:gemini-flash-latest]
+    fast-executor:
+      - - anthropic:claude-sonnet-5-5
+        - google:gemini-flash-latest
+        - anthropic:claude-haiku-5-5
+        - anthropic:claude-haiku-4-5
+        - baseten:zai-org/GLM-5.3-Flash
+        - baseten:deepseek-ai/DeepSeek-V4.1-Flash-1017
+    cheap-classifier:
+      - - anthropic:claude-haiku-5-5
+        - google:gemini-flash-latest
+        - anthropic:claude-haiku-4-5
+        - baseten:zai-org/GLM-5.3-Flash
+        - baseten:deepseek-ai/DeepSeek-V4.1-Flash-1017
+    judge:
+      - - anthropic:claude-opus-5-5
+        - google:gemini-flash-latest
+        - google:gemini-flash-lite-latest
+        - baseten:deepseek-ai/DeepSeek-V4.1-Flash-1017
+        - baseten:zai-org/GLM-5.3-Flash
+    vision:
+      - - anthropic:claude-sonnet-5-5
+        - google:gemini-flash-latest
+        - anthropic:claude-opus-5-5
+        - anthropic:claude-haiku-5-5
+        - anthropic:claude-haiku-4-5
+        - baseten:zai-org/GLM-5.3-Flash
+        - baseten:deepseek-ai/DeepSeek-V4.1-Flash-1017
+    computer-use:
+      - [anthropic:claude-sonnet-5-5, openai:gpt-6-sol]
+      - [anthropic:claude-sonnet-5-5, openai:gpt-6-sol, google:gemini-flash-latest]

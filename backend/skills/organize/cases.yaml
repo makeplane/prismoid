@@ -1,0 +1,11 @@
+routing:
+  - goal: "turn these tasks into a kanban board grouped by status"
+    expect: organize
+  - goal: "make a project timeline I can see as a gantt from this plan"
+    expect: organize
+  - goal: "organize the vendors in this doc into a sortable table with a calendar of renewal dates"
+    expect: organize
+golden:
+  - goal: "Organize the workstreams in the attached brief into a kanban board grouped by status, with a table view"
+    inputs: ["tests/fixtures/atlas-workstreams.md"]
+    must_contain: ['"board"', '"collection_version"']

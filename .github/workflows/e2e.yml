@@ -1,0 +1,68 @@
+# The browser smoke flows (ADR-081): `just e2e` on a fresh runner. It starts its own Postgres and
+# Silo (S3) containers, the worker and the API, builds and serves the web app, and drives sign-in, a
+# project, settings, the design-system page and a task record in Chromium. No flow calls a model,
+# so the job needs no secret and runs the same on a fork. Not on every PR: nightly, or by hand
+# (Actions -> E2E smoke flows -> Run workflow).
+name: E2E smoke flows
+
+on:
+  schedule:
+    - cron: "0 4 * * *" # 04:00 UTC nightly
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  flows:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install backend deps
+        working-directory: backend
+        run: uv sync --frozen
+
+      # No version: the action reads the root package.json's packageManager pin (pnpm 12, ADR-071).
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Install node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install the JS workspace
+        run: pnpm install --frozen-lockfile
+
+      # The headless shell and the system libraries it needs; stack.sh's own install is then a no-op.
+      - name: Install Chromium for Playwright
+        working-directory: web
+        run: pnpm exec playwright install --with-deps --only-shell chromium
+
+      # The runner sets CI, which turns on a retry, forbids test.only and writes the HTML report.
+      - name: The flows
+        run: uvx --from rust-just just e2e
+
+      - name: Keep the report, traces and stack logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-report
+          path: |
+            web/playwright-report/
+            web/test-results/
+            web/e2e/.state/logs/
+          retention-days: 14

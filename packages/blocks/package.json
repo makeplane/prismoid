@@ -1,0 +1,59 @@
+{
+  "name": "@prismoid/blocks",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "exports": {
+    ".": {
+      "style": "./src/styles.css"
+    },
+    "./attachment": "./src/attachment/index.tsx",
+    "./bubble": "./src/bubble/index.tsx",
+    "./card": "./src/card/index.tsx",
+    "./cn": "./src/internal/cn.ts",
+    "./code-block": "./src/code-block/index.tsx",
+    "./marker": "./src/marker/index.tsx",
+    "./message-scroller": "./src/message-scroller/index.tsx",
+    "./prompt-input": "./src/prompt-input/index.tsx",
+    "./sidebar": "./src/sidebar/index.tsx",
+    "./spinner": "./src/spinner/index.tsx",
+    "./toast": "./src/toast/index.tsx"
+  },
+  "scripts": {
+    "typecheck": "tsc",
+    "lint": "oxlint src",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@base-ui/react": "catalog:",
+    "@makeplane/propel": "catalog:",
+    "@shadcn/react": "catalog:",
+    "class-variance-authority": "catalog:",
+    "clsx": "catalog:",
+    "lucide-react": "catalog:",
+    "shiki": "catalog:",
+    "tailwind-merge": "catalog:"
+  },
+  "peerDependencies": {
+    "react": "catalog:",
+    "react-dom": "catalog:"
+  },
+  "devDependencies": {
+    "@testing-library/dom": "catalog:",
+    "@testing-library/react": "catalog:",
+    "@testing-library/user-event": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "happy-dom": "catalog:",
+    "oxlint": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

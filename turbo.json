@@ -1,0 +1,37 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "globalEnv": ["APP_TARGET", "VITE_PRISMOID_API_URL"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*", "$TURBO_ROOT$/packages/blocks/src/**"],
+      "outputs": ["build/**", "build-admin/**"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "typecheck": {
+      "dependsOn": ["^build"],
+      "outputs": [".react-router/**"]
+    },
+    "lint": {},
+    "format:check": {},
+    "lint:tokens": {
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/blocks/src/**"]
+    },
+    "lint:radius": {
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/blocks/src/**"]
+    },
+    "lint:dash": {},
+    "lint:contrast": {
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/blocks/src/**"]
+    },
+    "test": {
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/docs/api/**"]
+    },
+    "check": {
+      "dependsOn": ["typecheck", "lint", "format:check", "lint:tokens", "lint:radius", "lint:dash", "lint:contrast", "test"]
+    }
+  }
+}

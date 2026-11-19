@@ -1,0 +1,67 @@
+name: Bug report
+description: Something in Prismoid does not work as documented.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. **Security problems go through SECURITY.md, never a public issue.**
+        Remove API keys, tokens and personal data from anything you paste.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: The smallest sequence that shows the problem, ideally from a fresh `just dev` or `prismoid up`.
+      placeholder: |
+        1. just dev
+        2. just cli do "..." --wait
+        3. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: setup
+    attributes:
+      label: How you run Prismoid
+      options:
+        - Dev stack (just dev)
+        - Local mode (prismoid up, macOS)
+        - Single-host deploy (deploy/compose.prod.yaml)
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: driver
+    attributes:
+      label: Machine driver
+      options:
+        - docker
+        - sandbar
+        - device
+        - Not sure / not relevant
+  - type: input
+    id: commit
+    attributes:
+      label: Commit
+      description: The output of `git rev-parse --short HEAD`.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS and version, Docker version, browser if it is a web app problem.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and task events
+      description: |
+        Relevant API or worker log lines (`/tmp/prismoid-api.log`, `/tmp/prismoid-worker.log` under `just dev`),
+        or the task's record from `just cli tasks events <task id>`.
+      render: text

@@ -1,0 +1,7 @@
+routing:
+  - goal: "draft an email to the client about the delay"
+    expect: email
+  - goal: "write a reply to this message asking for an extension"
+    expect: email
+  - goal: "compose a note to the team about the launch"
+    expect: email

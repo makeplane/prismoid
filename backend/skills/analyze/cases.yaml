@@ -1,0 +1,7 @@
+routing:
+  - goal: "analyse this sales data and tell me the trends"
+    expect: analyze
+  - goal: "what does this dataset show about churn"
+    expect: analyze
+  - goal: "look at these numbers and find the outliers"
+    expect: analyze

@@ -1,0 +1,43 @@
+.DS_Store
+.vscode
+node_modules
+dist
+.turbo
+
+# secrets — never
+.env
+.keys/
+*.pem
+~/.prismoid
+
+# python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.benchmarks/
+backend/evals/reports/
+.import_linter_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# working dirs
+skills-work/
+bots-work/
+.frames/
+
+# the Ed25519 signing key — generated on first run, never committed
+.signing-key
+.connectors-key
+deploy/.env
+
+# Claude Code: project launch config is shared; local permission grants are not
+.claude/settings.local.json
+
+# harness worktrees (superpowers:using-git-worktrees)
+.claude/worktrees/
+
+# Playwright MCP browser sessions: screenshots and traces of local runs
+.playwright-mcp/

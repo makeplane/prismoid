@@ -1,0 +1,12 @@
+# Nightly Prismoid backup (deploy/backup/backup.sh). Installed by deploy/backup/install.sh.
+[Unit]
+Description=Prismoid nightly backup (pg_dump both DBs + MinIO volume, restic off-host)
+Wants=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/prismoid-backup.env
+ExecStart=/srv/prismoid/deploy/backup/backup.sh
+Nice=10
+IOSchedulingClass=idle

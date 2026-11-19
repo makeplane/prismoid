@@ -1,0 +1,7 @@
+routing:
+  - goal: "generate a PDF report of these findings"
+    expect: pdf
+  - goal: "make a one-page PDF fact sheet from this brief"
+    expect: pdf
+  - goal: "merge these three PDFs into a single file"
+    expect: pdf

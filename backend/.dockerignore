@@ -1,0 +1,15 @@
+# Keep the build context small and the image clean. The venv is rebuilt in the image;
+# git history, caches, and local dev cruft have no business in a production layer.
+.venv/
+.git/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+node_modules/
+tests/
+skills-work/
+*.log
+.env
+.DS_Store

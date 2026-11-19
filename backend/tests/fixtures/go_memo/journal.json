@@ -1,0 +1,20 @@
+[
+  {"tool": "web.search", "ok": true, "summary": "5 results"},
+  {"tool": "web.search", "ok": true, "summary": "5 results"},
+  {"tool": "web.fetch", "ok": true, "summary": "go.dev/doc/devel/release"},
+  {"tool": "web.fetch", "ok": true, "summary": "go.dev/blog"},
+  {"tool": "web.fetch", "ok": true, "summary": "go.dev/dl"},
+  {"tool": "web.search", "ok": true, "summary": "5 results"},
+  {"tool": "web.fetch", "ok": true, "summary": "groups.google.com/g/golang-announce"},
+  {"tool": "web.fetch", "ok": true, "summary": "groups.google.com/g/golang-announce/c/q5Lb3GZr9Ck"},
+  {"tool": "web.fetch", "ok": true, "summary": "groups.google.com/g/golang-announce/c/W7xK1dP4m2s/m/Zr8ePq0aBQAJ"},
+  {"tool": "web.fetch", "ok": true, "summary": "pkg.go.dev/vuln"},
+  {"tool": "web.fetch", "ok": true, "summary": "pkg.go.dev/vuln/GO-2026-6859"},
+  {"tool": "web.fetch", "ok": true, "summary": "pkg.go.dev/vuln/GO-2026-6861"},
+  {"tool": "web.search", "ok": true, "summary": "5 results"},
+  {"tool": "web.fetch", "ok": false, "summary": "go.dev/doc/go1.27.4"},
+  {"tool": "web.fetch", "ok": true, "summary": "go.dev/doc/security/policy"},
+  {"tool": "web.fetch", "ok": true, "summary": "github.com/golang/go/milestone/412"},
+  {"tool": "web.fetch", "ok": true, "summary": "go.dev/doc/go1.27"},
+  {"tool": "frame.publish", "ok": true, "summary": "document:/work/go-release-memo.md"}
+]

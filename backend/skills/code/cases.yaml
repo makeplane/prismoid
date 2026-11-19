@@ -1,0 +1,7 @@
+routing:
+  - goal: "write a python script to parse these logs"
+    expect: code
+  - goal: "build me a function that dedupes this list"
+    expect: code
+  - goal: "write and test a small CLI for this"
+    expect: code

@@ -1,0 +1,7 @@
+routing:
+  - goal: "add the cheapest 1 TB SSD on the store's site to my cart"
+    expect: browse
+  - goal: "sign in to the admin page and change the shipping address on order 1042"
+    expect: browse
+  - goal: "book a table for two on the restaurant's website for Friday at 8pm"
+    expect: browse

@@ -1,0 +1,78 @@
+# Chaos — the kill matrix, weekly. Does a task survive a component dying mid-flight?
+#
+# The durability claim is the whole system: a task is a DBOS workflow journalled in Postgres, so a
+# worker that dies mid-step is recovered and the task resumes from its last completed step. `just chaos`
+# proves it — submit a real task, kill the worker while it runs, restart, and require the workflow to
+# resume and run a step to completion on the restarted worker.
+#
+# Like evals.yml, it needs the same provider secrets (a task calls a model).
+# Weekly, plus on-demand.
+
+name: Chaos — kill matrix
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"   # 06:00 UTC Mondays
+  workflow_dispatch:
+
+concurrency:
+  group: chaos
+  cancel-in-progress: true
+
+jobs:
+  kill-matrix:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: backend   # the service dir (ADR-007)
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      PRISMOID_CLI_API_URL: http://localhost:8111
+      B: http://localhost:8111
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+
+      - name: Bring up the stack
+        run: |
+          docker compose -f deploy/compose.yaml up -d --wait
+          docker compose -f deploy/compose.yaml run --rm minio-init
+
+      # uvx --from rust-just: the runner image ships no `just` binary; rust-just runs it without PATH ceremony.
+      - name: Install deps + migrate + seed
+        run: |
+          uv sync --frozen
+          uvx --from rust-just just migrate
+          uv run prismoid models seed
+
+      - name: Add a frontier judge of a second family (if the key is present)
+        if: ${{ env.OPENAI_API_KEY != '' }}
+        run: |
+          uv run prismoid models add openai:gpt-5 --classes judge \
+            --price input_token=1.25/M --price output_token=10/M --enable
+
+      # The worker first: its first start creates the durable engine's database, which the API needs to boot.
+      # chaos.sh then kills it and manages a single worker of its own.
+      - name: Start the API
+        run: |
+          .venv/bin/prismoid run worker > worker.log 2>&1 &
+          for _ in $(seq 1 90); do if grep -q "worker ready" worker.log; then break; fi; sleep 2; done
+          grep -q "worker ready" worker.log || { cat worker.log; exit 1; }
+          uv run prismoid run api --port 8111 > api.log 2>&1 &
+          for _ in $(seq 1 60); do if curl -sf http://localhost:8111/healthz; then break; fi; sleep 2; done
+          curl -sf http://localhost:8111/healthz || { cat api.log; exit 1; }
+
+      # Signup is a call to the API, so it comes after the API is up.
+      - name: Create a user + token
+        run: |
+          uv run prismoid login --signup --email chaos@example.com --name Chaos \
+            --password "${{ secrets.CI_USER_PASSWORD || 'correct horse battery staple' }}"
+
+      - name: Run the kill matrix
+        run: uvx --from rust-just just chaos

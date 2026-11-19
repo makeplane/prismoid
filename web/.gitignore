@@ -1,0 +1,21 @@
+.DS_Store
+.env
+/node_modules/
+
+# React Router
+/.react-router/
+/build/
+/build-admin/
+
+# local auth-seed harness (never committed)
+public/.dev-token
+public/dev-seed.html
+
+# vitest coverage reports (pnpm test:coverage)
+/coverage/
+
+# Playwright smoke flows (just e2e): the seed, results and report
+/e2e/.state/
+/test-results/
+/playwright-report/
+/.vitest/

@@ -1,0 +1,7 @@
+routing:
+  - goal: "build a landing page for the product launch"
+    expect: page
+  - goal: "make a single-page HTML site from this announcement"
+    expect: page
+  - goal: "create an interactive one-page dashboard mock in HTML"
+    expect: page

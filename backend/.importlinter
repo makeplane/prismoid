@@ -1,0 +1,159 @@
+; The layering law (HANDOFF §7). `just layers` is the enforcement.
+; Higher layers may import lower ones. Names on one line separated by "|" are
+; independent siblings: same rank, and they may not import each other (":" would allow it).
+
+[importlinter]
+root_package = prismoid
+include_external_packages = False
+
+; The contract names only modules that exist — import-linter refuses to guard a ghost.
+; It therefore grows as the layers land, and each micro's log records the line it added.
+; `prismoid.conf` joined at M0.2 with conf.py.
+
+[importlinter:contract:layers]
+name = Layer-first architecture (§7)
+type = layers
+layers =
+    prismoid.runner
+    prismoid.api
+    prismoid.jobs
+    prismoid.operations
+    prismoid.ai | prismoid.features
+    prismoid.db | prismoid.storage | prismoid.mailer | prismoid.fcm | prismoid.egress_relay
+    prismoid.schemas | prismoid.conf
+    prismoid.conf_machines
+    prismoid.conf_env
+exhaustive = False
+
+; `prismoid.ai.deps` joined at M0.8 with ai/deps.py.
+; `prismoid.ai.bots` joined with the bots lane (ADR-045) — a sibling of skills: it validates a
+; format and imports nothing above schemas. The bot COMPILER lives in ai/agents/custom.py
+; instead, because it produces an AgentDef and that is the top of this contract.
+; `prismoid.ai.plugins` (ADR-045 W7) sits above the format siblings: it reads a bundle's own
+; files and NAMES the skill/bot directories it finds — the walking-through-the-right-door is
+; operations' composition, but the reader legitimately imports the bots format's path constants.
+; `prismoid.ai.capabilities` holds the per-run behaviour (the steering capability, the run guard) that
+; `agents` mounts; it sits under the roster and over the ports it reads on `deps`.
+; `prismoid.ai.rules` holds the pure decisions the hooks and operations both apply (budget, plan, approval
+; rules): values in, a verdict out. It sits under the capabilities that apply them and over `deps`.
+; `prismoid.ai.verification` checks a deliverable: it ships the suites into a frame and reads their
+; verdicts back, so it sits over `frames` and under every caller that asks for a verdict.
+; `prismoid.ai.context` renders the text a model reads that is not a tool (the step brief, remembered
+; context, the thread, today). The brief names tools and frame paths, so it sits over the bottom line.
+
+[importlinter:contract:engine-layers]
+name = The engine's internals are layered (§7)
+type = layers
+layers =
+    prismoid.ai.agents
+    prismoid.ai.capabilities
+    prismoid.ai.rules
+    prismoid.ai.deps
+    prismoid.ai.plugins
+    prismoid.ai.verification
+    prismoid.ai.context
+    prismoid.ai.gateway | prismoid.ai.frames | prismoid.ai.skills | prismoid.ai.tools | prismoid.ai.bots
+exhaustive = False
+
+; "Views never touch agents; agents never contain business logic; operations compose both" (§1).
+; The ban is on the DIRECT import. `api → operations → ai` is not a violation — it is the design:
+; operations is the only composer, and it must reach the engine to compose it. Without
+; `allow_indirect_imports`, this contract forbids the architecture it exists to protect.
+[importlinter:contract:api-never-touches-the-engine]
+name = Views never touch agents (Rule 3, §14)
+type = forbidden
+allow_indirect_imports = True
+source_modules =
+    prismoid.api
+forbidden_modules =
+    prismoid.ai
+
+[importlinter:contract:engine-is-persistence-free]
+name = ai/ is persistence-free and extractable (Rule 6, §14)
+type = forbidden
+source_modules =
+    prismoid.ai
+forbidden_modules =
+    prismoid.db
+    prismoid.operations
+    prismoid.jobs
+    prismoid.api
+
+; The engine takes its deployment settings through one door, `prismoid.ai.config`, which a host fills
+; (`use_settings`) or leaves on the deployment's own. A driver, wire or tool that imports
+; `prismoid.conf` itself is a second door no host can steer. Only direct imports count: every module
+; reaches `prismoid.conf` through the seam on purpose.
+[importlinter:contract:ai-reads-settings-through-one-seam]
+name = ai/ reads deployment settings only through prismoid.ai.config
+type = forbidden
+allow_indirect_imports = True
+source_modules =
+    prismoid.ai
+forbidden_modules =
+    prismoid.conf
+    prismoid.conf_machines
+    prismoid.conf_env
+ignore_imports =
+    prismoid.ai.config -> prismoid.conf
+
+; `prismoid.device` (ADR-078) is the helper process that touches the user's computer. It
+; sits beside the layers, not in them: it may import only schemas, conf and `prismoid.egress_relay` (the
+; forward relay its egress proxy shares with the Docker one, stdlib plus schemas), and none of the
+; stack above. A layers contract cannot say "sibling of everything", so this one forbids.
+; `prismoid.egress_relay` joined later, moved out of `ai/frames/egress.py`.
+[importlinter:contract:device-helper-is-standalone]
+name = The device helper imports only schemas and conf (ADR-078)
+type = forbidden
+source_modules =
+    prismoid.device
+forbidden_modules =
+    prismoid.db
+    prismoid.operations
+    prismoid.jobs
+    prismoid.api
+    prismoid.ai
+    prismoid.storage
+    prismoid.mailer
+    prismoid.fcm
+    prismoid.features
+
+; Inside operations, the leaves (rules any verb may ask: who an actor is, the job keys, the inbox)
+; sit under the nouns (one module per resource), and the nouns under the engine (the task's run:
+; execution, planning, gates, steering, thread, tasks, routines). ":" lets siblings import each
+; other; the order is the rule. Function-local imports count too: they are edges like any other.
+; The ignore list is the debt on the day this contract landed, every upward edge a noun takes into
+; the engine. It may only shrink: an entry whose import is gone fails the contract until it is
+; deleted, and a new upward edge fails it outright. A module not listed here is not checked yet.
+[importlinter:contract:operations-layers]
+name = Inside operations: leaves, then nouns, then the engine
+type = layers
+containers =
+    prismoid.operations
+layers =
+    departures : execution : early_boot : turn : planning : planning_turns : planning_steps : gates : gate_open : gate_budget : gate_sweep : steering : thread : tasks : routines : routine_fire : routine_events
+    admin_health : admin_ops : artifacts : auth : bot_lessons : bot_selection : bot_templates : bots : budget_estimate : capture : channels : chat : chat_home : chat_reply : connector_oauth : connectors : device_gates : device_grants : push_devices : figures : grounding : live : longform : machines : memory : models : planning_brief : plugins : presence : prices : project_invites : projects : qa : screen : screen_control : screen_fanout : screen_relay : screen_state : screen_wire : skills : skill_selection : swarm : task_door : usage : verification : workspaces
+    allowance : attribution : blobs : bot_access : bot_scope : call_log : chat_record : chat_verdict : cipher : connector_attach : connector_judge : context : deadline : dispatch : egress_allowances : features : health : inbox : notifier : plan_shapes : push : questions : registry : routing : sources : standing : stream_tickets : throttle : tickets
+ignore_imports =
+    prismoid.operations.admin_ops -> prismoid.operations.steering
+    prismoid.operations.artifacts -> prismoid.operations.execution.mounts
+    prismoid.operations.bots -> prismoid.operations.thread
+    prismoid.operations.capture -> prismoid.operations.tasks
+    prismoid.operations.chat -> prismoid.operations.steering
+    prismoid.operations.chat -> prismoid.operations.tasks
+    prismoid.operations.connectors -> prismoid.operations.thread
+    prismoid.operations.figures -> prismoid.operations.execution.harvest
+    prismoid.operations.longform -> prismoid.operations.execution.mounts
+    prismoid.operations.longform -> prismoid.operations.planning_steps
+    prismoid.operations.machines.screen -> prismoid.operations.gates
+    prismoid.operations.machines.screen -> prismoid.operations.steering
+    prismoid.operations.machines.sleep -> prismoid.operations.steering
+    prismoid.operations.memory -> prismoid.operations.planning
+    prismoid.operations.memory -> prismoid.operations.steering
+    prismoid.operations.memory -> prismoid.operations.thread
+    prismoid.operations.presence -> prismoid.operations.steering
+    prismoid.operations.qa -> prismoid.operations.execution.mounts
+    prismoid.operations.screen -> prismoid.operations.steering
+    prismoid.operations.swarm -> prismoid.operations.planning_steps
+    prismoid.operations.usage -> prismoid.operations.gates
+    prismoid.operations.verification -> prismoid.operations.execution
+    prismoid.operations.verification -> prismoid.operations.steering

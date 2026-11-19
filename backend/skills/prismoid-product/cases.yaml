@@ -1,0 +1,11 @@
+routing:
+  - goal: "what is a Routine in Prismoid and how does it run?"
+    expect: prismoid-product
+  - goal: "explain what a Gate is when my task stops to ask me something"
+    expect: prismoid-product
+  - goal: "compare Plane and Jira as issue trackers for a 20-person team"
+    expect: compare
+  - goal: "draft an email to my team about our new standup routine"
+    expect: email
+  - goal: "summarize this long article on how airports assign gates to flights"
+    expect: summarize

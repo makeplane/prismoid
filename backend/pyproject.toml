@@ -1,0 +1,193 @@
+[project]
+name = "prismoid"
+version = "0.1.0"
+description = "Prismoid — a general-purpose digital worker that verifies before it delivers."
+readme = "README.md"
+license = "AGPL-3.0-only"
+requires-python = ">=3.12,<3.13"
+
+# Every dependency earns its row in HANDOFF §3. No row, no import (Rule 13).
+# Bounds are the versions actually resolved and locked at M0.1; uv.lock pins them exactly.
+dependencies = [
+    "fastapi>=0.139",                              # HTTP framework                      §3
+    "uvicorn[standard]>=0.51",                     # ASGI (uvloop + httptools)           §3
+    "pydantic[email]>=2.13",                       # the constitution (+ RFC-5322 emails)  §3
+    "pydantic-settings>=2.14",                     # one typed Settings tree             §3
+    "pydantic-ai-slim[anthropic,openai,google,mcp,retries]>=2.68",  # agent runtime (+MCP, ADR-020; +retries = tenacity, already transitively locked — ADR-024)  §3
+    "dbos>=2.26",                                  # durable jobs on Postgres            §3
+    "logfire[fastapi,system-metrics,asyncpg,httpx]>=5.4",  # OTel tracing/metrics (ASGI + host + DB + outbound spans)  §3
+    "sqlalchemy[asyncio]>=2.0.51",                 # fat models                          §3
+    "asyncpg>=0.31",                               # driver + LISTEN/NOTIFY              §3
+    "alembic>=1.18",                               # migrations only                     §3
+    "argon2-cffi>=25.1",                           # argon2id password hashing           §3
+    "pydantic-evals>=2.68",                        # golden tasks, skill evals, judge; pins pydantic-ai-slim exactly, so the two move together  §3
+    "sse-starlette>=3.4",                          # SSE framing (co-primary transport)  §3
+    "orjson>=3.11",                                # JSON fast path                      §3
+    "httpx>=0.28",                                 # HTTP client (CLI, tools, connectors)  §3
+    "httpx2>=2.13",                                # the provider wire: SDKs + retrying transport (ADR-072)  §3
+    "boto3>=1.43",                                 # S3/MinIO                            §3
+    "docker>=7.2",                                 # frame driver                        §3
+    "cryptography>=50.0",                          # Ed25519 signing (>=50: GHSA-g6cj-pr64-35w5)  §3
+    "typer>=0.26",                                 # the CLI                             §3
+    "pyyaml>=6.0",                                 # skill manifests + eval cases        §3
+    "trafilatura>=2.2",                            # web_fetch's page reader (ADR-046; Apache-2.0 since 1.8.0 — never <1.8, that is GPL)  §3
+    "markitdown[docx,pptx,xlsx,pdf]>=0.1.7,<0.2",  # web_fetch's file door, sidecar-only (ADR-046; upstream pins <0.2 itself — 0.x semver)  §3
+    "cronsim>=2.6",                               # routine fire math: Debian-exact DST (ADR-048)  §3
+    "websockets>=16.1,<18",                        # the worker's CDP WebSocket to a remote browser (the device relay, ADR-078)  §3
+    "google-auth[requests]>=2.56",                 # the FCM push wire's service-account token (ADR-100; already locked via google-genai)  §3
+    "pixeltable-pgserver==0.7.2",
+    "python-json-logger>=3.3",                     # JSON log lines on stdout (ADR-101)  §3
+]
+
+[project.scripts]
+prismoid = "prismoid.runner.main:app"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15",
+    "pyright>=1.1.411",
+    "pytest>=9.1",
+    "pytest-asyncio>=1.3",
+    "pytest-benchmark>=5.1",
+    "locust>=2.42",
+    "import-linter>=2.13",
+    "testcontainers>=4.14",
+    "polyfactory>=2.22",
+    "pre-commit>=4.4",
+    "pytest-xdist>=3.6",
+    "pytest-cov>=7.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["prismoid"]  # flat layout (ADR-007): the package sits directly in the service dir
+
+# ── ruff ──────────────────────────────────────────────────────────────────────
+[tool.ruff]
+line-length = 110          # api/urls.py (SCREEN 1) stays column-aligned at this width
+target-version = "py312"
+src = [".", "tests"]
+# vendor/: third-party source copied in as is (vendor/README.md); never linted or formatted here.
+extend-exclude = ["vendor"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",    # pycodestyle
+    "F",         # pyflakes
+    "I",         # isort
+    "UP",        # pyupgrade
+    "B",         # bugbear
+    "ASYNC",     # §15: async correctness is a perf requirement
+    "C4",        # comprehensions
+    "SIM",       # simplify
+    "RUF",       # ruff-specific
+]
+ignore = [
+    "E501",      # line length is formatter's job; the route table is deliberately aligned
+    "B008",      # FastAPI's Depends()-in-defaults idiom
+    "RUF001",    # the spec is written in §, — and –; the code quotes it. Ambiguous-unicode
+    "RUF002",    # rules would have us launder every reference to the document we implement.
+    "RUF003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B011"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+# ── pyright ───────────────────────────────────────────────────────────────────
+[tool.pyright]
+include = ["prismoid", "tests"]
+# db/migrations: Alembic's env.py + generated versions — never strict-checked (same scope as the
+# pre-ADR-007 layout, where migrations/ sat outside the include list entirely).
+# ai/frames/image/house: `plane_house` is a FRAME resident (ADR-034) — it imports python-pptx /
+# python-docx / reportlab that live only in the image, exactly like skills/*/scripts; its pure
+# halves are tested by path from tests/.
+exclude = ["**/__pycache__", ".venv", "prismoid/db/migrations", "prismoid/ai/frames/image/house"]
+extraPaths = ["prismoid/ai/frames/image_browser"]
+pythonVersion = "3.12"
+typeCheckingMode = "strict"
+reportMissingTypeStubs = false
+reportUnknownMemberType = false      # boto3/docker SDKs are untyped; §3 accepts them
+reportUnknownVariableType = false
+reportUnknownArgumentType = false
+reportUnknownParameterType = false
+reportUnknownLambdaType = false
+reportUnusedCallResult = false
+# The engine and the value layer are held to the full strict set: an Unknown that leaks out of ai/
+# or schemas/ reaches every caller, so these two rules are on there (and stay off elsewhere, where
+# the untyped SDKs make them noise). The first environment that matches a file wins, so the files
+# listed first keep the repo-wide setting.
+executionEnvironments = [
+  { root = "prismoid/ai", extraPaths = ["prismoid/ai/frames/image_browser"], reportUnknownVariableType = "error", reportUnknownArgumentType = "error" },
+  { root = "prismoid/schemas", reportUnknownVariableType = "error", reportUnknownArgumentType = "error" },
+]
+
+# ── logfire ───────────────────────────────────────────────────────────────────
+[tool.logfire]
+# Tests and the CLI do not call logfire.configure(); only the API and worker processes do.
+# Without this, every `logfire.warn` in a test prints a "not configured" warning that buries the
+# real output. The instrumentation is still a no-op — it just stops apologising for it.
+ignore_no_config = true
+
+# ── pytest ────────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+# ONE loop per session (2026-08-25, the speed pass): per-function loops were why the engine had
+# to be disposed after every test (asyncpg connections bind to the loop that made them — the
+# conftest's original lesson). One loop per process removes the disease instead of treating the
+# symptom: the pool opens once and every test reuses it. Under xdist that is one loop per
+# WORKER process, which is the same isolation story.
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+addopts = "-q --strict-markers -m 'not perf and not live and not drill'"  # perf needs a live API (`just perf`); live calls a paid model (`-m live`); drills run with `-m drill`
+markers = [
+    "integration: needs the compose stack (pg + minio) running",
+    "perf: performance budget assertions (§15)",
+    "live: calls a real model provider and costs money; deselected unless selected with `-m live`",
+    "drill: the call log's durability drills (tests/drills: SIGKILL subprocesses, a scripted model); deselected unless selected with `-m drill`",
+    "frames: spins real frames (Docker, frame images, the egress proxy); set from the frames-* xdist groups in tests/conftest.py",
+    "must_run(reason): fails a test `PRISMOID_DEVICE_PROOF` wants and this machine cannot run (tests/support/markers.py)",
+    # No `chaos` marker: the kill-and-restart drill is a shell script (tools/chaos.sh, on the
+    # chaos.yml weekly cadence) with its runbook at docs/runbooks/chaos-worker-kill.md — never a
+    # pytest suite, so a declared-never-used marker would be exactly the drift `--strict-markers` guards.
+]
+# The warnings that mean a bug fail the test: a coroutine nobody awaited (RuntimeWarning), an
+# exception swallowed in a finalizer or callback (unraisable), one that killed a thread.
+filterwarnings = [
+    "error::RuntimeWarning",
+    "error::pytest.PytestUnraisableExceptionWarning",
+    "error::pytest.PytestUnhandledThreadExceptionWarning",
+]
+
+# ── coverage (pytest-cov drives it in CI's integration job) ──────────────────────────────
+[tool.coverage.run]
+source = ["prismoid"]
+branch = true
+# One data file per process: xdist workers and the subprocesses tests start each write their own,
+# and `coverage combine` (pytest-cov does it at the end of a run) merges them.
+parallel = true
+# SQLAlchemy's async engine runs the ORM inside greenlets; without this the lines it runs there
+# are missed. Threads are the default tracer and must be named alongside it.
+concurrency = ["greenlet", "thread"]
+# A Python subprocess a test starts (the sidecar, a CLI under test) is measured too.
+patch = ["subprocess"]
+
+[tool.coverage.report]
+skip_empty = true
+precision = 1
+# The floor for the combined unit + integration number (CI's integration job, frame tests excluded):
+# measured at 82.4 with the macOS-only device tests left out, minus one. Raise it as coverage rises.
+fail_under = 81.4
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError", "@overload", "\\.\\.\\.$"]
+
+[tool.uv]
+# Bounds on what pydantic-ai's `mcp` extra pulls in, not dependencies of their own: fastmcp-slim 4
+# resolves the MCP SDK 2.x, a protocol move the connector client (ai/tools/connectors.py) has not made.
+# A wider lock upgrade must not take it by accident.
+constraint-dependencies = ["fastmcp-slim<4", "mcp<2"]

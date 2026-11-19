@@ -1,0 +1,7 @@
+routing:
+  - goal: "design the typed outline of a 40-page guide to municipal water policy, written in parts"
+    expect: longform
+  - goal: "write part 03 of a long report from its outline, continuing from the parts already written"
+    expect: longform
+  - goal: "write a 60-page handbook on onboarding new nurses"
+    expect: longform

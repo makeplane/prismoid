@@ -1,0 +1,17 @@
+{
+  "name": "prismoid",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "check": "turbo run check",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test"
+  },
+  "devDependencies": {
+    "turbo": "catalog:"
+  },
+  "packageManager": "pnpm@12.16.1"
+}

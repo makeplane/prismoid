@@ -1,0 +1,4 @@
+# actionlint (go run github.com/rhysd/actionlint/cmd/actionlint): the runner labels it cannot know.
+self-hosted-runner:
+  labels:
+    - blacksmith-4vcpu-ubuntu-2404

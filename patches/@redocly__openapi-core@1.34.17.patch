@@ -1,0 +1,13 @@
+diff --git a/lib/utils.js b/lib/utils.js
+index 479f4dde6a2edb1240c9a893c822e3d0f4014f3f..6abbe70b5a69b8e61b1fdd6ea5959b70112eec9e 100644
+--- a/lib/utils.js
++++ b/lib/utils.js
+@@ -39,7 +39,7 @@ exports.getProxyAgent = getProxyAgent;
+ exports.dequal = dequal;
+ const fs = require("fs");
+ const path_1 = require("path");
+-const minimatch = require("minimatch");
++const { minimatch } = require("minimatch"); // minimatch >= 9 exports it by name
+ const js_yaml_1 = require("./js-yaml");
+ const env_1 = require("./env");
+ const logger_1 = require("./logger");

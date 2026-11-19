@@ -1,0 +1,70 @@
+# The frame tests, nightly: the integration and conformance tests marked `frames` (every test in a
+# frames-* xdist group, tests/conftest.py). They start real frames on the runner's Docker, build the
+# frame images the first time they need them, and send frame traffic through the compose egress
+# proxy, which is too slow and too heavy for every PR. ci.yml's `integration` job runs the rest of
+# the suite on every PR, on the same fresh database recipe.
+name: Nightly frame tests
+
+on:
+  schedule:
+    - cron: "0 5 * * *" # 05:00 UTC nightly
+  workflow_dispatch:
+
+concurrency:
+  group: integration-frames
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  frames:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: prismoid
+          POSTGRES_PASSWORD: prismoid
+          POSTGRES_DB: prismoid
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U prismoid -d prismoid"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+    env:
+      PRISMOID_WORKER_DATABASE_URL: postgresql://prismoid:prismoid@localhost:5433/prismoid
+      PRISMOID_API_DATABASE_URL: postgresql+asyncpg://prismoid:prismoid@localhost:5433/prismoid
+      PRISMOID_WORKER_S3_ENDPOINT: http://localhost:9000
+      PRISMOID_S3_PUBLIC_ENDPOINT: http://localhost:9000
+      PRISMOID_WORKER_ANTHROPIC_API_KEY: sk-ant-ci-not-a-key
+      PRISMOID_WORKER_OPENAI_API_KEY: sk-ci-not-a-key
+      PRISMOID_WORKER_GOOGLE_API_KEY: ci-not-a-key
+      PRISMOID_TEST_FRESH_DB: "1"
+    steps:
+      - uses: actions/checkout@v7
+
+      # The proxy and the object store from the local compose file: the frame network the proxy
+      # creates (prismoid_frame_net) is the one frames join, and its control port (3129) is the worker
+      # setting's default. Silo runs here rather than as a service container because a service
+      # container cannot be given `server /data`, and it makes no buckets until minio-init does.
+      - name: The egress proxy and the object store (compose)
+        run: |
+          docker compose -f deploy/compose.yaml up -d --wait egress-proxy minio
+          docker compose -f deploy/compose.yaml run --rm minio-init
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install backend deps
+        run: uv sync --frozen
+
+      # The frames-* groups pin each group to one worker, so three or four workers carry them all.
+      - name: The frame tests
+        run: uv run pytest tests/integration tests/conformance -n 4 --dist loadgroup -m "frames"

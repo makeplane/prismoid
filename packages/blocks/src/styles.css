@@ -1,0 +1,62 @@
+/**
+ * Copyright (c) 2026-present Plane Software, Inc. and contributors
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * See the LICENSE file for details.
+ */
+
+/*
+ * @prismoid/blocks - Prismoid's design system stylesheet (ADR-074).
+ *
+ * Plane's look, from Propel's own tokens: neutrals, type, radius, shadows, status colors.
+ * One change: the accent. Propel paints the accent from the brand ramp (primary buttons,
+ * selected tabs, checks, switches, focus rings, links), and Prismoid's brand is monochrome:
+ * black in light, white in dark. Each brand
+ * step points at the neutral step of matching lightness, so every role Propel gives a step
+ * (fill, hover, active, subtle wash, icon) keeps its contrast. Dark primary labels need no
+ * override: Propel draws them in `text-inverse`, near-black in dark.
+ *
+ * Import it after Tailwind (the app's entry CSS): `@import "@prismoid/blocks";`. Theme follows
+ * Propel's `data-theme` attribute (light | dark).
+ */
+@import "@makeplane/propel/styles";
+/* Blocks' own components: Tailwind scans this package for the classes they use. */
+@source "./";
+
+@layer base {
+  :root,
+  :host {
+    --brand-50: var(--neutral-100);
+    --brand-100: var(--neutral-200);
+    --brand-200: var(--neutral-300);
+    --brand-300: var(--neutral-400);
+    --brand-400: var(--neutral-500);
+    --brand-500: var(--neutral-600);
+    --brand-600: var(--neutral-700);
+    --brand-700: var(--neutral-800);
+    --brand-800: var(--neutral-900);
+    /* hover and active lift off black: a darker black would not read as a state */
+    --brand-900: var(--neutral-1100);
+    --brand-1000: var(--neutral-1000);
+    --brand-1100: var(--neutral-1100);
+    --brand-1200: var(--neutral-1200);
+    --brand-default: var(--neutral-1200);
+
+    @variant dark {
+      --brand-50: var(--neutral-100);
+      --brand-100: var(--neutral-200);
+      --brand-200: var(--neutral-300);
+      --brand-300: var(--neutral-400);
+      --brand-400: var(--neutral-500);
+      --brand-500: var(--neutral-600);
+      --brand-600: var(--neutral-800);
+      /* hover and active dim from white */
+      --brand-700: var(--neutral-1200);
+      --brand-800: var(--neutral-1100);
+      --brand-900: var(--neutral-1200);
+      --brand-1000: var(--neutral-white);
+      --brand-1100: var(--neutral-white);
+      --brand-1200: var(--neutral-white);
+      --brand-default: var(--neutral-white);
+    }
+  }
+}

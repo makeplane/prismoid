@@ -1,0 +1,9 @@
+routing:
+  - goal: "turn these notes into a README in Markdown"
+    expect: markdown
+  - goal: "convert this changelog into GitHub-flavoured Markdown with a table of versions"
+    expect: markdown
+  - goal: "format this update for Slack with numbered points"
+    expect: slack
+  - goal: "write a status report on the migration for the board"
+    expect: report

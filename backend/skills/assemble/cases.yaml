@@ -1,0 +1,13 @@
+routing:
+  - goal: "assemble the finished chapter files into one Word document with a table of contents"
+    expect: assemble
+  - goal: "join the mounted section markdown files into a single 60-page PDF report"
+    expect: assemble
+  - goal: "merge the numbered section files into the final document with front matter and figures"
+    expect: assemble
+  # The ADR-029 lanes (review gap): the two new walkers must route here too, or the publish
+  # gate is green only for the surfaces that existed before them.
+  - goal: "assemble the slide-group markdown sections into the final PowerPoint deck with speaker notes"
+    expect: assemble
+  - goal: "build the finished workbook from the sheet-spec sections - one sheet per section, typed cells"
+    expect: assemble

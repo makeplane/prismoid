@@ -1,0 +1,19 @@
+{
+  "scenario": "no_scatter_below_the_sweep",
+  "outcome": "delivered",
+  "loose": {"task.renamed": 1},
+  "record": [
+    {"type": "task.created", "mode": "standard"},
+    {"type": "task.dequeued", "turn": 1},
+    {"type": "task.status", "status": "planning"},
+    {"type": "task.planned", "route": "express", "route_source": "lead", "steps": [{"id": "s1", "agent": "lead", "kind": "step", "lane_role": "express"}], "machine": "none"},
+    {"type": "task.status", "status": "running"},
+    {"type": "step.dequeued", "step": "s1"},
+    {"type": "step.state", "step": "s1", "state": "running", "agent": "lead", "attempt": 1},
+    {"type": "step.prompt", "step": "s1", "agent": "lead", "attempt": 1},
+    {"type": "step.narration", "step": "s1"},
+    {"type": "step.state", "step": "s1", "state": "done", "agent": "lead", "attempt": 1},
+    {"type": "task.delivered"},
+    {"type": "memory.written", "count": 0}
+  ]
+}
