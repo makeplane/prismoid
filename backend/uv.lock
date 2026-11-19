@@ -467,6 +467,18 @@ wheels = [
 ]
 
 [[package]]
+name = "croniter"
+version = "7.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "python-dateutil" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/54/17/3c60d4cf8c8768f8a116328f94ddb2f205e64d5afbb1bcb85f315bfbbf42/croniter-7.0.0.tar.gz", hash = "sha256:a0b2568303c774f6a4ea2d4ce2e72b1ee911029c7070d64a1befe05cdb107f5a", size = 191123, upload-time = "2026-11-09T06:52:40.106Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4c/89/10f9987ebdef47dbe9db94e9c00dcbd91a6ff1aa46ad58bee5b50fa454c9/croniter-7.0.0-py3-none-any.whl", hash = "sha256:92090bce3cef195a037a46b78430c4cdd6250e90671d9d7dcd9e486147daaca4", size = 63225, upload-time = "2026-11-09T06:52:38.545Z" },
+]
+
+[[package]]
 name = "cronsim"
 version = "2.8"
 source = { registry = "https://pypi.org/simple" }
@@ -541,19 +553,20 @@ wheels = [
 
 [[package]]
 name = "dbos"
-version = "2.26.0"
+version = "3.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
+    { name = "click" },
+    { name = "croniter" },
     { name = "psycopg", extra = ["binary"] },
     { name = "python-dateutil" },
     { name = "pyyaml" },
     { name = "sqlalchemy", extra = ["asyncio"] },
-    { name = "typer-slim" },
-    { name = "websockets" },
+    { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/68/aa/d5119d8772ff01e1d133bfca513d86723cdf9fc87391d4dfa9afbfcf2e5d/dbos-2.26.0.tar.gz", hash = "sha256:1be900963e7c00fdd9734a8defbc9e90acd32241d7ebea71e0a9af6c5b6090ea", size = 541758, upload-time = "2026-06-30T15:35:34.469Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/3b/f5/62915a118f1f873d6767372da78351721b6b4b7c6abb3b60ba03b70b038a/dbos-3.5.0.tar.gz", hash = "sha256:8005419054f2442d4a4041fc248e3940bae81af5e5b166e258256de562d1819f", size = 598043, upload-time = "2026-11-10T16:19:08.175Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ca/32/6a8c03e39e733b0483cf949232576800fff730a232fa5af4b62f7d3c3660/dbos-2.26.0-py3-none-any.whl", hash = "sha256:f60e57078d2f67e3938c0f9fc455a399654689d78645dd915214a442bd9474f4", size = 218086, upload-time = "2026-06-30T15:35:32.631Z" },
+    { url = "https://files.pythonhosted.org/packages/24/3e/a3d19004f520444aa410bd4302196e50a044c401fbd3d8b49dd89f7b1e8a/dbos-3.5.0-py3-none-any.whl", hash = "sha256:d92cde12b0ffa00b85af682ee5eb40d51d466873095f3efac64b660f743b72f2", size = 283906, upload-time = "2026-11-10T16:19:06.219Z" },
 ]
 
 [[package]]
@@ -3091,18 +3104,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/6c/aa/0de7986aa1fa856adb961c67345189b97d13f6e250b34ba68884df865f07/typer-0.29.1.tar.gz", hash = "sha256:ab6eb3880bf67ce96147734717f9ec333c06f66e361f3ea947d0be43da39f242", size = 205843, upload-time = "2026-11-11T09:18:39.782Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/05/ff/51969745f31cea6bcd12151e668febcf979656316e67a7755942267c1273/typer-0.29.1-py3-none-any.whl", hash = "sha256:00dbc549c13428bec1be55fe1f4d0fb8c6637a310e4f178ef14abe9534ee7b58", size = 121064, upload-time = "2026-11-11T09:18:38.671Z" },
-]
-
-[[package]]
-name = "typer-slim"
-version = "0.24.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "typer" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/a7/a7/e6aecc4b4eb59598829a3b5076a93aff291b4fdaa2ded25efc4e1f4d219c/typer_slim-0.24.0.tar.gz", hash = "sha256:f0ed36127183f52ae6ced2ecb2521789995992c521a46083bfcdbb652d22ad34", size = 4776, upload-time = "2026-02-16T22:08:51.2Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/a7/24/5480c20380dfd18cf33d14784096dca45a24eae6102e91d49a718d3b6855/typer_slim-0.24.0-py3-none-any.whl", hash = "sha256:d5d7ee1ee2834d5020c7c616ed5e0d0f29b9a4b1dd283bdebae198ec09778d0e", size = 3394, upload-time = "2026-02-16T22:08:49.92Z" },
 ]
 
 [[package]]
