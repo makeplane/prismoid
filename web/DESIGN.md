@@ -401,7 +401,8 @@ viewport height, and each pane wears its own header on the same h-14 line:
   window (the close first, then Download). The download link rides ArtifactView's one
   fetch (`onDownloadInfo`, always the viewed version; `showDownload={false}` suppresses
   the in-row copy); the verdict rides the route's live shelf, so the badge flips the
-  moment the receipt frame lands. The pane renders ArtifactView with `chrome="bare"`:
+  moment the receipt frame lands, and the pane hands it to ArtifactView (`verdict`), whose
+  receipt re-reads on a new one instead of keeping "Not verified yet". The pane renders ArtifactView with `chrome="bare"`:
   no PageHeader block inside the content — the band IS the identity.
 
 **ONE vertical scroll — the page's/pane's, for every kind** (2026-08-07, twice): a

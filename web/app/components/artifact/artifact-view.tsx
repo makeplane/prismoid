@@ -169,12 +169,18 @@ export function ArtifactView({
     };
   }, [currentId]);
 
-  // The verdict the open read already reflects; only a new one re-reads the receipt, and only
-  // for the head (an older version's receipt is its own).
-  const verdictRead = useRef(verdict);
+  // The verdict the open read already reflects, per artifact (the view is not remounted when the
+  // host opens another): only a new one re-reads the receipt, and only for the head (an older
+  // version's receipt is its own).
+  const verdictRead = useRef({ id: artifactId, verdict });
   useEffect(() => {
-    if (!verdict || verdict === verdictRead.current || currentId !== artifactId) return;
-    verdictRead.current = verdict;
+    const read = verdictRead.current;
+    if (read.id !== artifactId) {
+      verdictRead.current = { id: artifactId, verdict }; // another artifact: its open read is the base
+      return;
+    }
+    if (!verdict || verdict === read.verdict || currentId !== artifactId) return;
+    verdictRead.current = { id: artifactId, verdict };
     let cancelled = false;
     unwrap(
       api.GET("/v1/artifacts/{artifact_id}/verification", {

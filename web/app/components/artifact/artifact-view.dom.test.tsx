@@ -174,6 +174,21 @@ describe("ArtifactView receipt and history", () => {
     await waitFor(() => expect(screen.queryByText(/Not verified yet/)).toBeNull());
   });
 
+  it("a second document's verdict re-reads its own receipt, whatever the first one said", async () => {
+    let get = serve();
+    const { rerender } = render(<ArtifactView artifactId="a1" verdict="pass" />);
+    await screen.findByRole("heading", { name: "Quarterly notes" });
+    expect(screen.queryByText(/Not verified yet/)).toBeNull();
+    get.mockRestore();
+    get = serve({ artifact: art({ id: "a2" }), verification: null });
+    rerender(<ArtifactView artifactId="a2" />);
+    expect(await screen.findByText(/Not verified yet/)).toBeDefined();
+    get.mockRestore();
+    serve({ artifact: art({ id: "a2" }) });
+    rerender(<ArtifactView artifactId="a2" verdict="pass" />);
+    await waitFor(() => expect(screen.queryByText(/Not verified yet/)).toBeNull());
+  });
+
   it("viewing an older version refetches it, and the host is not told of a new head", async () => {
     const user = userEvent.setup();
     const v2 = art({ id: "a2", revision: 2, sha256: "bbb" });
