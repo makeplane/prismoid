@@ -1,0 +1,100 @@
+# The model flows (ADR-081, amended 2026-11-22): `just e2e-models` on a fresh runner. The same private
+# stack as the core flows (e2e.yml), but the worker holds a provider key and Playwright runs only its
+# `models` project: real tasks, a follow-up, a fork, a document and its verification, questions, a
+# bot's chat, evals and drafter, a routine's run, each on a real model. The verification needs a
+# frame, so the job also starts the compose egress proxy and builds the base frame image, as the
+# nightly frame tests do. A run spends about twenty cents, so it never runs on a schedule or a PR:
+# by hand only (Actions -> E2E model flows -> Run workflow).
+# It needs the repository secret E2E_ANTHROPIC_API_KEY, and stops at its first step without one.
+name: E2E model flows
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-models-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  flows:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 30
+    # The key rides only the steps that need it, never the dependency installs.
+    steps:
+      - name: Check the provider key
+        env:
+          PRISMOID_WORKER_ANTHROPIC_API_KEY: ${{ secrets.E2E_ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$PRISMOID_WORKER_ANTHROPIC_API_KEY" ]; then
+            echo "::error::Set the repository secret E2E_ANTHROPIC_API_KEY to run the model flows."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install backend deps
+        working-directory: backend
+        run: uv sync --frozen
+
+      # No version: the action reads the root package.json's packageManager pin (pnpm 12, ADR-071).
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Install node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install the JS workspace
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium for Playwright
+        working-directory: web
+        run: pnpm exec playwright install --with-deps --only-shell chromium
+
+      # A document's verification runs in a throwaway frame: frames join the compose frame network,
+      # which the egress proxy creates (its control port, 3129, is the worker setting's default), and
+      # boot the base frame image, built here so the first receipt does not wait on a build.
+      - name: The frame network, its egress proxy and the base frame image
+        working-directory: backend
+        run: |
+          docker compose -f deploy/compose.yaml up -d --wait egress-proxy
+          uv run python -c "from prismoid.ai.frames.docker_driver import ensure_image; print(ensure_image('base'))"
+
+      # The runner sets CI, which turns on a retry, forbids test.only and writes the HTML report.
+      - name: The model flows
+        env:
+          PRISMOID_WORKER_ANTHROPIC_API_KEY: ${{ secrets.E2E_ANTHROPIC_API_KEY }}
+        run: uvx --from rust-just just e2e-models
+
+      # The upload is not masked the way the log is: a file that carries the key never leaves the
+      # runner. No file should (the key never reaches the browser, and the logs print no headers).
+      - name: Drop any file that carries the key
+        if: failure()
+        env:
+          PRISMOID_WORKER_ANTHROPIC_API_KEY: ${{ secrets.E2E_ANTHROPIC_API_KEY }}
+        run: |
+          grep -rlF -- "$PRISMOID_WORKER_ANTHROPIC_API_KEY" \
+            web/playwright-report web/test-results web/e2e/.state/logs 2>/dev/null \
+            | while read -r leaked; do echo "::warning::dropped $leaked: it carries the key"; rm -f "$leaked"; done
+
+      - name: Keep the report, traces and stack logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-models-report
+          path: |
+            web/playwright-report/
+            web/test-results/
+            web/e2e/.state/logs/
+          retention-days: 14

@@ -298,13 +298,25 @@ web-local port="8100":
 web-gen:
     pnpm gen
 
-# Playwright over sign-in, a project, settings, /ds and a task record (ADR-081), on a private
-# Postgres + Silo (S3) + worker + API and the built web app, all removed when it ends. No model is
-# called, and it is not part of `check`. Arguments go to `playwright test`.
-# the browser smoke flows against a private stack
+# Playwright over every surface reachable without a model run, the operator console included
+# (ADR-081), on a private Postgres + Silo (S3) + worker + API and both built web apps, all removed
+# when it ends. Every provider key is blanked, so no model can be called, and it is not part of
+# `check`. Arguments go to `playwright test`.
+# the browser flows against a private stack
 [working-directory: '..']
 e2e *ARGS:
     bash web/e2e/stack.sh {{ARGS}}
+
+# The model flows (ADR-081, amended 2026-11-22): Playwright's `models` project sends real work to a
+# real model on the same private stack - tasks, a follow-up, a fork, a document and its
+# verification, questions, a bot's chat, evals and drafter, a routine's run. Needs a provider key
+# in the environment (PRISMOID_WORKER_ANTHROPIC_API_KEY, or the OpenAI or Google one) and the
+# compose frame network (`just up`), and spends about twenty cents a run; never nightly, by hand or
+# from Actions -> E2E model flows.
+# the browser flows that call a real model (needs a provider key)
+[working-directory: '..']
+e2e-models *ARGS:
+    E2E_MODELS=1 bash web/e2e/stack.sh --project=models {{ARGS}}
 
 # the web half of the gate - typecheck (typegen + tsc), oxlint, the token + radius + dash guards,
 # the contrast audit, unit tests: turbo's `check` task runs them all, for web and the workspace
