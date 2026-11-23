@@ -6,7 +6,7 @@
 
 import type { Page } from "@playwright/test";
 import { call, createHeldRoutine, type Routine, stamp } from "./support/api";
-import { expect, knownBug, test, toast } from "./fixtures";
+import { expect, test, toast } from "./fixtures";
 
 // Routines (ADR-048): standing work that mints an ordinary task on every fire. Nothing here may
 // start a run, so a routine is fired only when its posture is hold (an event routine made in the
@@ -181,7 +181,7 @@ test("an event routine is held, and Run now mints a held run that opens in the s
   ).toBeVisible();
 
   await runNow(page);
-  await expect(toast(page, "Fired - the run shows below.")).toBeVisible();
+  await expect(toast(page, "Fired - the task waits below until you release it.")).toBeVisible();
   const run = peek.getByRole("button", { name: /^held manual · / });
   await expect(run).toHaveCount(1);
 
@@ -238,10 +238,6 @@ test("Run now on a routine whose season is over says the fire was skipped", asyn
   accountPage: page,
   account,
 }) => {
-  knownBug(
-    "web/app/routes/routines/route.tsx:297 - Run now toasts 'Fired - the run shows below.' for " +
-      "every answer, even a skipped fire that minted nothing (here skipped_season, which retires it)",
-  );
   // A held routine allowed one run, which it has already had: the next fire is skipped.
   const routine = await call<Routine>("/routines", {
     token: account.token,
@@ -261,6 +257,7 @@ test("Run now on a routine whose season is over says the fire was skipped", asyn
   await runNow(page);
   // The answer lands first: the routine retires, so Run now goes away.
   await expect(peek.getByRole("button", { name: "Run now" })).toHaveCount(0);
+  await expect(toast(page, "Not fired (skipped season) - the run shows below.")).toBeVisible();
   // A toast that has already shown cannot be waited away, so this reads it once, no retry.
   expect(await toast(page, "Fired - the run shows below.").count()).toBe(0);
 });

@@ -8,7 +8,7 @@
 // The task browser, driven: status groups with their true counts, the debounced search sending
 // its query, bulk select (checkbox, Select all, Ctrl+A, Escape) then archive or confirmed
 // delete on the wire, an empty list, and the other groupings and the board layout.
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -100,6 +100,34 @@ describe("TaskBrowser lists", () => {
     );
     expect(screen.queryByRole("heading", { name: "Failed & cancelled" })).toBeNull();
     expect(screen.getByText("fleet")).toBeDefined();
+  });
+
+  it("switching to Archived recounts the headers for the archived rows", async () => {
+    const router = createMemoryRouter(
+      [
+        {
+          path: "*",
+          element: (
+            <TaskWindowProvider initial={{ pins: [], recents: [] }}>
+              <TaskBrowser syncToUrl />
+            </TaskWindowProvider>
+          ),
+        },
+      ],
+      { initialEntries: ["/"] },
+    );
+    render(<RouterProvider router={router} />);
+    await screen.findByText("Goal r1");
+    const counted = (): { archived?: boolean }[] =>
+      get.mock.calls
+        .filter((c: unknown[]) => c[0] === "/v1/tasks/counts")
+        .map(
+          (c: unknown[]) => (c[1] as { params: { query: { archived?: boolean } } }).params.query,
+        );
+    await waitFor(() => expect(counted().length).toBeGreaterThan(0));
+    expect(counted().some((q) => q.archived)).toBe(false);
+    await act(() => router.navigate("/?archived=1"));
+    await waitFor(() => expect(counted().some((q) => q.archived === true)).toBe(true));
   });
 
   it("the search box sends the settled query to the server", async () => {

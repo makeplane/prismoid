@@ -5,7 +5,7 @@
  */
 
 import type { Page } from "@playwright/test";
-import { chooseOption, composer, escapeRegExp, expect, knownBug, test, toast } from "./fixtures";
+import { chooseOption, composer, escapeRegExp, expect, test, toast } from "./fixtures";
 import { call, createBot, createHeldTask, stamp } from "./support/api";
 
 // The home composer. Sending with When set to Now starts a task that calls a model, so these flows
@@ -291,10 +291,6 @@ test.describe("a scheduled ask saves a routine", () => {
   });
 
   test("a refused fleet schedule keeps the typed goal", async ({ accountPage: page }) => {
-    knownBug(
-      "web/app/components/composer/task-composer.tsx:232-235 - the fleet refusal returns instead " +
-        "of throwing, so composer.tsx:270-272 treats the save as sent and clears the typed goal",
-    );
     const goal = "Compare three vendors";
     await page.goto("/");
     await submitRefused(page, goal, "fleet");
@@ -305,10 +301,6 @@ test.describe("a scheduled ask saves a routine", () => {
   test("a refused attachment schedule keeps the goal and the file", async ({
     accountPage: page,
   }) => {
-    knownBug(
-      "web/app/components/composer/task-composer.tsx:237-240 - the attachments refusal returns " +
-        "instead of throwing, so composer.tsx:270-273 clears the typed goal and the attached file",
-    );
     const goal = "Read the attached notes";
     await page.goto("/");
     await submitRefused(page, goal, "attachment");

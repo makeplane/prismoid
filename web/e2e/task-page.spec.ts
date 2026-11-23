@@ -5,7 +5,7 @@
  */
 
 import type { Page } from "@playwright/test";
-import { escapeRegExp, expect, knownBug, test, toast } from "./fixtures";
+import { escapeRegExp, expect, test, toast } from "./fixtures";
 import {
   ApiError,
   call,
@@ -202,11 +202,6 @@ test.describe("task page", () => {
     accountPage: page,
     account,
   }) => {
-    knownBug(
-      "web/app/routes/tasks.$id/task-menu.tsx:78 - the menu offers Pause on any live task, but " +
-        "backend/prismoid/operations/steering.py:505 pauses only a running or waiting one, so a " +
-        "held task's Pause answers 422 'cannot pause a task that is created'",
-    );
     const task = await createHeldTask(account.token, "Draft the quarterly plan");
     await page.goto(`/tasks/${task.id}`);
     const menu = await taskMenu(page);

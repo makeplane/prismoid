@@ -6,7 +6,7 @@
 
 import type { Locator } from "@playwright/test";
 import { call, stamp } from "./support/api";
-import { accountMenu, expect, knownBug, openSettings, test, toast } from "./fixtures";
+import { accountMenu, expect, openSettings, test, toast } from "./fixtures";
 
 test("edits the profile name in settings and keeps it", async ({ signedInPage: page, seed }) => {
   await page.goto("/");
@@ -110,11 +110,6 @@ test.describe("settings on a fresh account", () => {
   });
 
   test("edits a memory in place", async ({ accountPage: page, account }) => {
-    knownBug(
-      "backend/prismoid/api/serializers/memories.py:83 reads updated_at after " +
-        "operations/memory.py:174 committed and expired it, so PATCH /v1/memories/{id} answers " +
-        "500 (MissingGreenlet) although the edit is saved; the row stays open in edit mode",
-    );
     await call("/memories", {
       token: account.token,
       body: { scope: "user", kind: "preference", text: "Prefers tide tables in metric units." },
@@ -140,11 +135,6 @@ test.describe("settings on a fresh account", () => {
   });
 
   test("retires a memory", async ({ accountPage: page, account }) => {
-    knownBug(
-      "backend/prismoid/api/serializers/memories.py:83 reads updated_at after " +
-        "operations/memory.py:186 committed and expired it, so POST /v1/memories/{id}/retire " +
-        "answers 500 (MissingGreenlet) although the memory is retired; the row stays listed",
-    );
     await call("/memories", {
       token: account.token,
       body: { scope: "user", kind: "fact", text: "The field station is on the north shore." },

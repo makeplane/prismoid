@@ -134,7 +134,23 @@ describe("signups paused", () => {
     await user.click(screen.getByRole("button", { name: "Create account" }));
     expect(await screen.findByRole("heading", { name: "Signups are paused" })).toBeTruthy();
   });
+
+  it("a refused address gets the form's own sentence, never the server's vague one", async () => {
+    vi.spyOn(api, "POST").mockImplementation((() =>
+      failure(403, "forbidden", "that email cannot be registered")) as never);
+    const user = userEvent.setup();
+    mount();
+    await user.type(await screen.findByLabelText(/^Name/), "Ada");
+    await user.type(screen.getByLabelText(/^Email/), "ada@example.com");
+    await user.type(screen.getByLabelText(/^Password/), "a-long-enough-password");
+    await user.click(screen.getByRole("button", { name: "Create account" }));
+    expect(await screen.findByText(EMAIL_REFUSED)).toBeTruthy();
+    expect(screen.queryByText("that email cannot be registered")).toBeNull();
+  });
 });
+
+const EMAIL_REFUSED =
+  "That email can't be used to sign up. If it already has an account, sign in instead.";
 
 describe("the consent line", () => {
   it("links Terms and Privacy Policy to the configured URLs", async () => {

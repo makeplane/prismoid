@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { expect, knownBug, test, toast } from "./fixtures";
+import { expect, test, toast } from "./fixtures";
 import { ApiError, call, createBot, stamp } from "./support/api";
 
 // A bot's tabs, everything that needs no model: the empty shelves, memory, the webhook door and
@@ -103,12 +103,6 @@ test.describe("bots: tabs", () => {
   });
 
   test("edits a memory in place", async ({ accountPage: page, account }) => {
-    knownBug(
-      "backend/prismoid/db/models/memory.py:245 - updated_at's onupdate=func.now() leaves the " +
-        "attribute expired after the commit, so memory_out (api/serializers/memories.py:83) " +
-        "lazy-loads it outside the greenlet: PATCH /v1/memories/{id} saves, then answers 500 " +
-        "(MissingGreenlet) and the row stays in edit mode with 'Couldn't save the memory.'",
-    );
     const { name } = await createBot(account.token, { name: `memoedit-${stamp()}` });
     await teach(account.token, name, "The Q3 workbook lives in finance.");
     await page.goto(`/bots/${name}?tab=memory`);
@@ -129,11 +123,6 @@ test.describe("bots: tabs", () => {
   });
 
   test("retires a memory", async ({ accountPage: page, account }) => {
-    knownBug(
-      "backend/prismoid/db/models/memory.py:245 - the same expired updated_at: POST " +
-        "/v1/memories/{id}/retire retires the row, then answers 500 (MissingGreenlet in " +
-        "memory_out), so the row stays listed with 'Couldn't retire the memory.' until a reload",
-    );
     const { name } = await createBot(account.token, { name: `memoretire-${stamp()}` });
     await teach(account.token, name, "Invoices go out on the first.");
     await page.goto(`/bots/${name}?tab=memory`);
@@ -197,10 +186,6 @@ test.describe("bots: tabs", () => {
     accountPage: page,
     account,
   }) => {
-    knownBug(
-      "web/app/routes/bots/channels-tab.tsx:84 - remove() reloads the rows but never clears " +
-        "`minted`, so 'Token, shown once' keeps showing the removed channel's dead token",
-    );
     const { name } = await createBot(account.token, { name: `deadtoken-${stamp()}` });
     await page.goto(`/bots/${name}?tab=channels`);
     const main = page.getByRole("main");

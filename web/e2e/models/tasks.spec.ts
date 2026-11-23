@@ -5,7 +5,7 @@
  */
 
 import type { Page } from "@playwright/test";
-import { chooseOption, composer, escapeRegExp, expect, knownBug, test } from "../fixtures";
+import { chooseOption, composer, escapeRegExp, expect, test } from "../fixtures";
 import { call } from "../support/api";
 import {
   answerQuestions,
@@ -161,11 +161,6 @@ test.describe("a task on a real model", () => {
   test("the open reader shows the receipt once the check finishes", async ({
     accountPage: page,
   }) => {
-    knownBug(
-      "web/app/components/artifact/artifact-view.tsx:127-167 fetches the verification once, when " +
-        "the reader opens (its effect depends on currentId only); the reader opens at publish, " +
-        "before the check signs, so it keeps 'Not verified yet' after the thread shows the receipt",
-    );
     await page.goto("/");
     await chooseOption(page, "Deliverable", "Document · Markdown");
     await composer(page).fill("Write two sentences on what a neap tide is.");

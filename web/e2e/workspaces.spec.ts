@@ -8,7 +8,7 @@ import type { Page } from "@playwright/test";
 import { joinWorkspace, pageFor, PASSWORD, signUp, verifyEmail } from "./support/accounts";
 import { call, stamp } from "./support/api";
 import { codeIn, mailAvailable, waitForMail } from "./support/mailbox";
-import { composer, expect, knownBug, openSettings, test, toast } from "./fixtures";
+import { composer, expect, openSettings, test, toast } from "./fixtures";
 
 // Workspaces (ADR-061): the tenant. A person founds their own, switches between the ones they
 // belong to, and brings others in by an emailed invite. A switch or a join rebinds the session, so
@@ -101,11 +101,6 @@ test.describe("workspaces", () => {
       accountPage: page,
       account,
     }) => {
-      knownBug(
-        "web/app/components/workspace/workspace-members.tsx:180 closes the invite dialog and " +
-          "clears the email whatever the answer: onInvite's run() swallows the refusal into a " +
-          "toast and resolves, so a refused invite looks sent and the typed address is lost",
-      );
       const invitee = `e2e-workspaces-invitee-${stamp()}@example.com`;
       await page.goto("/");
       const settings = await openMembers(page, account.email);

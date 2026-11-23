@@ -45,6 +45,7 @@ import { useKeysetList } from "~/lib/paging";
 import type { components } from "~/lib/api/types.gen";
 import type { Route } from "./+types/route";
 import { collapseRuns, decisionLabel, type RunRow } from "./streaks";
+import { fireNote } from "./fire-note";
 import { NewRoutine } from "./new-routine";
 
 type RoutineRow = components["schemas"]["RoutineOut"];
@@ -261,11 +262,13 @@ function RoutinePeek({
   if (detail === null) return <LoadingState label="Opening the routine…" />;
   const r = detail;
 
-  const act = async (fn: () => Promise<unknown>, done: string) => {
+  /** Call a door, then say so: a fixed line, or one read off what the door answered. */
+  const act = async <T,>(fn: () => Promise<T>, done: string | ((answer: T) => void)) => {
     setBusy(true);
     try {
-      await fn();
-      toast.success(done);
+      const answer = await fn();
+      if (typeof done === "string") toast.success(done);
+      else done(answer);
       reload();
       onChanged?.();
     } catch (e) {
@@ -294,7 +297,12 @@ function RoutinePeek({
                 onClick={() =>
                   act(
                     () => unwrap(api.POST("/v1/routines/{routine_id}/fire", path)),
-                    "Fired - the run shows below.",
+                    (fired) => {
+                      const note = fireNote(fired);
+                      ({ success: toast.success, info: toast.info, error: toast.error })[note.tone](
+                        note.text,
+                      );
+                    },
                   ).then(() => setRunsBump((b) => b + 1))
                 }
               />

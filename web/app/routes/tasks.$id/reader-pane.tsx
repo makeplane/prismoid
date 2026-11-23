@@ -257,6 +257,7 @@ export function ReaderPane({
           onDownloadInfo={setDownload}
           onArtifactChanged={onArtifactChanged}
           readOnly={readOnly}
+          verdict={verdict}
         />
       </div>
     </section>

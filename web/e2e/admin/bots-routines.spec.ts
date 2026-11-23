@@ -7,7 +7,7 @@
 import type { Page } from "@playwright/test";
 import { signUp } from "../support/accounts";
 import { call, createBot, createHeldRoutine, stamp } from "../support/api";
-import { escapeRegExp, expect, knownBug, test, toast } from "../fixtures";
+import { escapeRegExp, expect, test, toast } from "../fixtures";
 
 // Bots and routines across the system. A bot is observed read-only, and reading its instructions is
 // itself an audited act. A routine has one operator verb, pause, which needs a reason and tells the
@@ -156,26 +156,20 @@ test.describe("console routines", () => {
   });
 
   test("the pause confirm waits for a reason the server accepts", async ({ adminPage: page }) => {
-    knownBug(
-      "web/app/components/admin/confirm.tsx:149 enables the confirm after one character, but " +
-        "backend/prismoid/api/serializers/admin_routines.py:40 requires a pause reason of at least " +
-        "3, so a short reason is sent and refused as 'the request body is not valid'",
-    );
     const { name } = await routineOnList(page, "link");
     const dialog = await openPause(page, name);
-    await dialog.getByRole("textbox", { name: "Reason" }).fill("ok");
-    // Either fix is right: the dialog holds a reason this short back, or the server takes it.
+    // The door takes a reason of three characters or more: a shorter one is held back here.
+    const reason = dialog.getByRole("textbox", { name: "Reason" });
     const confirm = dialog.getByRole("button", { name: "Pause routine" });
-    if (await confirm.isDisabled()) return;
+    await expect(dialog.getByText("At least 3 characters.")).toBeVisible();
+    await reason.fill("ok");
+    await expect(confirm).toBeDisabled();
+    await reason.fill("ok!");
     await confirm.click();
     await expect(toast(page, "Paused. Audited, and the owner has the note.")).toBeVisible();
   });
 
   test("a paused routine shows as paused without a reload", async ({ adminPage: page }) => {
-    knownBug(
-      "web/app/routes/admin/routines/route.tsx:47 pauses without refreshing the list (the " +
-        "ResourceList has no refreshMs), so the row still says active and offers Pause until a reload",
-    );
     const { name, row } = await routineOnList(page, "link");
     const dialog = await openPause(page, name);
     await dialog.getByRole("textbox", { name: "Reason" }).fill("Paused while the owner is away");

@@ -18,7 +18,7 @@ const noop = () => {};
 const handlers = {
   onRole: noop,
   onRemove: noop,
-  onInvite: noop,
+  onInvite: async () => true,
   onRevoke: noop,
   onLeave: noop,
   onTransfer: noop,

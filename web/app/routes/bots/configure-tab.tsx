@@ -10,7 +10,7 @@
 // per case why the pill is the colour it is; versions below.
 
 import { FlaskConical, Sparkles, Upload } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRevalidator } from "react-router";
 import { toast } from "@prismoid/blocks/toast";
 import { Pill, Rows, Section } from "~/components/kit";
@@ -24,6 +24,8 @@ import { cn } from "~/lib/utils";
 import type { BotHead } from "./route";
 import { Editor } from "./bot-editor";
 import { ShareTemplate } from "./share-template";
+import { authoringMark } from "./authoring-mark";
+import { useAuthoringPoll } from "./use-authoring-poll";
 
 type CaseRow = { goal: string; expected: string; chosen: string; ok: boolean };
 
@@ -68,25 +70,12 @@ export function ConfigureTab({
     }
   }
 
-  // The authoring jobs: both run on the worker and land back on this row, so the
-  // gesture here is start-then-poll - a few quiet revalidations, never a spinner takeover.
-  // ONE interval, cleared on unmount and restarted (not stacked) by a second click; one
-  // revalidation per tick (`onChanged` is the same revalidator one level up).
-  const [pollingUntil, setPollingUntil] = useState(0);
-  function pollResult() {
-    setPollingUntil(Date.now() + 40_000);
-  }
-  useEffect(() => {
-    if (pollingUntil <= Date.now()) return;
-    const timer = window.setInterval(() => {
-      if (Date.now() >= pollingUntil) {
-        setPollingUntil(0);
-        return;
-      }
-      revalidator.revalidate();
-    }, 5000);
-    return () => window.clearInterval(timer);
-  }, [pollingUntil, revalidator]);
+  // The authoring jobs: both run on the worker and land back on this row, so the gesture here
+  // is start-then-poll - quiet revalidations until the result lands, never a spinner takeover.
+  const pollResult = useAuthoringPoll(
+    authoringMark({ head, newest, draftAhead }),
+    revalidator.revalidate,
+  );
 
   async function draftForMe() {
     try {

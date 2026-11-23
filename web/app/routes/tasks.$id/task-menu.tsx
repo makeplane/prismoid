@@ -71,17 +71,33 @@ export type TaskAccess = {
 };
 
 /** Which verbs the ⋯ menu offers - only the ones the server would accept for THIS person, so a
- *  viewer never meets a Pause that answers 403. Pause/resume/cancel are also a live-task-only
- *  affair; the fork is offered whenever the caller may write. */
-export function menuVerbs(a: TaskAccess & { live: boolean }) {
+ *  viewer never meets a Pause that answers 403. Cancel is for any live task; pause only stops a
+ *  running or waiting one (a held or planning task answers 422) and resume only a paused one; the
+ *  fork is offered whenever the caller may write. */
+export function menuVerbs(a: TaskAccess & { status: TaskStatus }) {
+  const control = !TERMINAL.has(a.status) && a.canEdit;
+  const stoppable = a.status === "running" || a.status === "waiting";
   return {
-    control: a.live && a.canEdit,
+    control,
+    /** The one of pause and resume the server would take now, if either. */
+    toggle: !control
+      ? null
+      : stoppable
+        ? ("pause" as const)
+        : a.status === "paused"
+          ? ("resume" as const)
+          : null,
     fork: a.canEdit,
     rename: a.isCreator,
     archive: a.canCurate,
     delete: a.canCurate,
   };
 }
+
+const TOGGLE = {
+  pause: { icon: Pause, label: "Pause" },
+  resume: { icon: Play, label: "Resume" },
+} as const;
 
 export function TaskMenu({
   onFork,
@@ -111,7 +127,8 @@ export function TaskMenu({
   const [renaming, setRenaming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const live = !TERMINAL.has(status);
-  const verbs = menuVerbs({ ...access, live });
+  const verbs = menuVerbs({ ...access, status });
+  const toggle = verbs.toggle;
 
   async function toggleArchive() {
     try {
@@ -152,17 +169,11 @@ export function TaskMenu({
         <MenuContent align="end">
           {verbs.control && onControl && (
             <>
-              {status === "paused" ? (
+              {toggle && (
                 <MenuItem
-                  icon={<Icon icon={Play} />}
-                  label="Resume"
-                  onClick={() => onControl("resume")}
-                />
-              ) : (
-                <MenuItem
-                  icon={<Icon icon={Pause} />}
-                  label="Pause"
-                  onClick={() => onControl("pause")}
+                  icon={<Icon icon={TOGGLE[toggle].icon} />}
+                  label={TOGGLE[toggle].label}
+                  onClick={() => onControl(toggle)}
                 />
               )}
               <MenuItem

@@ -86,6 +86,7 @@ export function ArtifactView({
   onArtifactChanged,
   chrome = "full",
   readOnly = false,
+  verdict,
 }: {
   artifactId: string;
   hostActions?: ReactNode;
@@ -97,6 +98,9 @@ export function ArtifactView({
   chrome?: "full" | "bare";
   /** The reader may not write (a Project viewer): no edit, no restore, no label. */
   readOnly?: boolean;
+  /** The head's verdict as the host's live stream saw it. The receipt signs after publish, on its
+   *  own queue, so it usually lands after the reader opened: a new verdict re-reads it here. */
+  verdict?: string | null;
 }) {
   // The id being VIEWED - moves along the lineage via the version picker or a save.
   const [currentId, setCurrentId] = useState(artifactId);
@@ -164,6 +168,25 @@ export function ArtifactView({
       cancelled = true;
     };
   }, [currentId]);
+
+  // The verdict the open read already reflects; only a new one re-reads the receipt, and only
+  // for the head (an older version's receipt is its own).
+  const verdictRead = useRef(verdict);
+  useEffect(() => {
+    if (!verdict || verdict === verdictRead.current || currentId !== artifactId) return;
+    verdictRead.current = verdict;
+    let cancelled = false;
+    unwrap(
+      api.GET("/v1/artifacts/{artifact_id}/verification", {
+        params: { path: { artifact_id: artifactId } },
+      }),
+    )
+      .then((verification) => !cancelled && setState((s) => ({ ...s, verification })))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [verdict, currentId, artifactId]);
 
   if (state.loading) {
     return (

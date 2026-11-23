@@ -147,6 +147,15 @@ describe("Bot list", () => {
     expect(screen.getByText("0 bots · 0 pinned to sidebar")).toBeTruthy();
   });
 
+  it("a search that leaves the open bot out narrows the list and keeps its pane", async () => {
+    const user = userEvent.setup();
+    mount([bot("alpha"), bot("beta", { description: "Reviews contracts" })], "alpha", "?tab=runs");
+    await screen.findByRole("heading", { name: "alpha" });
+    await user.type(screen.getByPlaceholderText("Search bots…"), "contracts");
+    expect(screen.queryByRole("link", { name: /alpha/ })).toBeNull();
+    expect(screen.getByRole("heading", { name: "alpha" })).toBeTruthy();
+  });
+
   it("filters rows by name or description as you type", async () => {
     const user = userEvent.setup();
     mount([bot("alpha"), bot("beta", { description: "Reviews contracts" })]);

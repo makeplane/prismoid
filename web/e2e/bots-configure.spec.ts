@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { expect, knownBug, test, toast } from "./fixtures";
+import { expect, test, toast } from "./fixtures";
 import { createBot, stamp } from "./support/api";
 
 // Bots: the messenger's list and the Configure tab. Every bot here is a draft with written
@@ -234,11 +234,6 @@ test.describe("bots: create and configure", () => {
     accountPage: page,
     account,
   }) => {
-    knownBug(
-      "web/app/routes/bots/route.tsx:150 - the open bot is looked up in the search-filtered rows, " +
-        "so a search that excludes it swaps the pane for 'Pick a bot' and clearing the search " +
-        "remounts the pane, discarding unsaved Configure edits",
-    );
     const tag = stamp();
     const { name } = await createBot(account.token, { name: `open-${tag}` });
     await createBot(account.token, { name: `other-${tag}` });

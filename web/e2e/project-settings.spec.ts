@@ -8,7 +8,7 @@ import type { Page } from "@playwright/test";
 import { joinWorkspace, pageFor, signUp, verifyEmail } from "./support/accounts";
 import { createProject, stamp } from "./support/api";
 import { mailAvailable } from "./support/mailbox";
-import { expect, knownBug, section, test, toast } from "./fixtures";
+import { expect, section, test, toast } from "./fixtures";
 
 // A project's Settings tab, as its owner sees it. Each setting saves on its own Save, which
 // appears only while that field differs from the server, so several can be on screen at once.
@@ -123,10 +123,6 @@ test("adds a project memory that says who wrote it", async ({ accountPage: page,
 });
 
 test("each Save keeps the other fields' unsaved edits", async ({ accountPage: page, account }) => {
-  knownBug(
-    "web/app/routes/projects.$id/route.tsx:576-577 - SettingsTab.save() echoes BOTH name and " +
-      "budget from the server after any save, so saving the name throws away an unsaved budget edit",
-  );
   const project = await createProject(account.token, `Two edits ${stamp()}`);
   await openSettings(page, project.id);
   const nameRow = rowOf(page, "Project name");

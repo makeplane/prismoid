@@ -132,24 +132,11 @@ test.describe("a bot on a real model", () => {
       toast(page, "Writing a fuller draft - it lands here in a moment.").first(),
     ).toBeVisible();
 
-    // The draft lands as the next version. The tab re-reads the bot for 40 s only, and the drafter
-    // takes 20 to 40 s or more, so the flow waits on the server's v2 and then reloads.
-    test.info().annotations.push({
-      type: "bug",
-      description:
-        "web/app/routes/bots/configure-tab.tsx:76 polls for 40 s after Draft for me (and Test " +
-        "evals); a draft that lands later never shows until a reload, though the toast says it " +
-        "lands here in a moment",
+    // The draft lands as the next version, and the tab re-reads the bot until it does, however
+    // long the drafter takes: no reload.
+    await expect(main.getByRole("listitem").filter({ hasText: /^v2\s*draft/ })).toBeVisible({
+      timeout: RUN_TIMEOUT,
     });
-    await expect
-      .poll(
-        async () =>
-          (await call<{ version: number }>(`/bots/${name}`, { token: account.token })).version,
-        { timeout: RUN_TIMEOUT, intervals: [2_000] },
-      )
-      .toBe(2);
-    await page.reload();
-    await expect(main.getByRole("listitem").filter({ hasText: /^v2\s*draft/ })).toBeVisible();
     await expect(main.getByRole("textbox", { name: "Bot instructions" })).not.toHaveValue("");
   });
 });

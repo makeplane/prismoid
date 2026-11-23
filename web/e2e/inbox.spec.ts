@@ -8,7 +8,7 @@ import type { Page } from "@playwright/test";
 import { joinWorkspace, signUp, verifyEmail } from "./support/accounts";
 import { call, createHeldTask, createProject, type HeldTask, stamp } from "./support/api";
 import { mailAvailable } from "./support/mailbox";
-import { expect, knownBug, test } from "./fixtures";
+import { expect, test } from "./fixtures";
 
 // The inbox: notifications on the left, what each is about on the right. A held routine run is
 // the knock a flow can make without a model: firing a held routine mints a task and tells its
@@ -142,10 +142,6 @@ test("Enter on a focused toolbar button works that button, not the selected item
   accountPage: page,
   account,
 }) => {
-  knownBug(
-    "web/app/routes/inbox/route.tsx:236-246 - the window keydown handler skips only inputs, then opens the selected item " +
-      "on Enter whatever has focus, so Enter on Filter by kind (or Mark all read) also navigates away",
-  );
   await createHeldTask(account.token, `Hold the pier survey ${stamp()}`);
   await page.goto("/inbox");
   await expect(page.getByRole("button", { name: "Open task" })).toBeVisible();
@@ -217,11 +213,6 @@ test.describe("project knocks", () => {
     accountPage: page,
     account,
   }) => {
-    knownBug(
-      "web/app/routes/inbox/route.tsx:110-112 + 290-299 - project_shared and project_removed each " +
-        "get their own 'Projects' filter item, so the menu shows two identical items and either one " +
-        "hides the other kind's notification (merging them or naming them apart both fix it)",
-    );
     const host = await signUp("e2e-inbox", { name: "Bea Host" });
     await verifyEmail(host);
     await joinWorkspace(host, account);

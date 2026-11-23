@@ -572,9 +572,9 @@ function SettingsTab({
           },
         }),
       );
-      // Echo the canonical values back ("25" saved as "25.0000" must not stay dirty).
-      setName(updated.name);
-      setBudget(updated.budget_usd ?? "");
+      // Echo only what was SENT, canonical ("25" -> "25.0000"): the other field keeps its edit.
+      if (body.name !== undefined) setName(updated.name);
+      if (body.budget_usd !== undefined || body.clear_budget) setBudget(updated.budget_usd ?? "");
       revalidator.revalidate();
       toast.success("Saved.");
     } catch (e) {

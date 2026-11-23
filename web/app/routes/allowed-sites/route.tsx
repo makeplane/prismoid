@@ -97,7 +97,8 @@ export default function AllowedSites({ loaderData }: Route.ComponentProps) {
     setFieldError(null);
     try {
       const row = await unwrap(api.POST("/v1/egress-allowances", { body: { host: trimmed } }));
-      setRows((cur) => [row, ...cur]);
+      // An already-allowed host comes back as its existing row: move it to the top, never twice.
+      setRows((cur) => [row, ...cur.filter((r) => r.id !== row.id)]);
       setHost("");
     } catch (e) {
       if (e instanceof ApiError && e.status === 422 && e.fields?.host) {

@@ -7,7 +7,7 @@
 import { PASSWORD } from "./support/accounts";
 import { stamp } from "./support/api";
 import { mailAvailable, waitForMail } from "./support/mailbox";
-import { accountMenu, composer, expect, knownBug, test } from "./fixtures";
+import { accountMenu, composer, expect, test } from "./fixtures";
 
 // Signup from the form: the person gets an account, their own workspace and a session at once, and
 // the address is proved later by the emailed link. Every flow signs up an address of its own.
@@ -49,11 +49,6 @@ test.describe("signup", () => {
   test("an address that already has an account is refused in words", async ({ page, account }) => {
     // The API refuses an existing address with a deliberately vague 403 (it never confirms which
     // addresses exist), so the form owes the person its own written sentence, not the server's.
-    knownBug(
-      "web/app/routes/signup/route.tsx:57 maps only a 409 to written copy, but the API refuses an " +
-        "existing address with a 403 (backend/prismoid/operations/auth.py:168), so the form shows " +
-        'the raw lowercase "that email cannot be registered" and the 409 branch is dead code',
-    );
     await page.goto("/signup");
     await page.getByRole("textbox", { name: "Name" }).fill("Sam Signup");
     await page.getByRole("textbox", { name: "Email" }).fill(account.email);
@@ -64,6 +59,7 @@ test.describe("signup", () => {
     // The refusal keeps the person on the form, signed out, with a sentence of the form's own.
     await expect(page).toHaveURL(/\/signup$/);
     await expect(page.getByRole("button", { name: "Create account" })).toBeEnabled();
+    await expect(page.getByText(/^That email can't be used to sign up\. /)).toBeVisible();
     await expect(page.getByText("that email cannot be registered", { exact: true })).toHaveCount(0);
   });
 });

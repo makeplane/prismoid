@@ -67,6 +67,14 @@ const run = (id: string, decision: string, over: Record<string, unknown> = {}) =
 const ok = (data: unknown) =>
   Promise.resolve({ data, error: undefined, response: new Response(null, { status: 200 }) });
 
+/** The fire door's 202: what the gate decided, and the task when it made one. */
+const fired = (decision: string) => ({
+  run_id: "run1",
+  decision,
+  task_id: decision === "minted" ? "t1" : null,
+  detail: "",
+});
+
 let detail: Row;
 let runs: unknown[];
 let get: ReturnType<typeof vi.spyOn>;
@@ -194,6 +202,7 @@ describe("Routine peek verbs", () => {
   it("Run now fires, toasts and reloads the ledger", async () => {
     const user = userEvent.setup();
     const success = vi.spyOn(toast, "success");
+    post.mockImplementation((() => ok(fired("minted"))) as never);
     mount([row("a")], "/routines?routine=a");
     await user.click(await screen.findByRole("button", { name: "Run now" }));
     await waitFor(() => expect(posted("/v1/routines/{routine_id}/fire")).toHaveLength(1));
@@ -206,6 +215,18 @@ describe("Routine peek verbs", () => {
     });
   });
 
+  it("Run now on a fire the gate stood down says nothing fired", async () => {
+    const user = userEvent.setup();
+    const success = vi.spyOn(toast, "success");
+    const info = vi.spyOn(toast, "info");
+    post.mockImplementation((() => ok(fired("skipped_season"))) as never);
+    mount([row("a")], "/routines?routine=a");
+    await user.click(await screen.findByRole("button", { name: "Run now" }));
+    await waitFor(() =>
+      expect(info).toHaveBeenCalledWith("Not fired (skipped season) - the run shows below."),
+    );
+    expect(success).not.toHaveBeenCalled();
+  });
   it("Pause sends an empty body; a paused routine offers Resume and shows its note", async () => {
     const user = userEvent.setup();
     mount([row("a")], "/routines?routine=a");

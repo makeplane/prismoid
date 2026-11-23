@@ -40,6 +40,7 @@ const items = [
   item("b"),
   item("c", { read: true }),
   item("q", { kind: "question", title: "Report asks: which quarter?", payload: {} }),
+  item("r", { kind: "project_removed", title: "Removed r", payload: {}, read: true }),
 ];
 
 let post: ReturnType<typeof vi.spyOn>;
@@ -112,6 +113,40 @@ describe("Inbox triage", () => {
     await user.keyboard("{Enter}");
     await waitFor(() => expect(router.state.location.pathname).toBe("/projects/p-a"));
     expect(screen.getByText("project page")).toBeDefined();
+  });
+
+  it("Enter on a focused toolbar button is that button's, never the list's", async () => {
+    const user = userEvent.setup();
+    const router = mount();
+    (await screen.findByRole("button", { name: "Filter by kind" })).focus();
+    await user.keyboard("{Enter}");
+    expect(await screen.findByRole("menuitemradio", { name: "All notifications" })).toBeDefined();
+    expect(router.state.location.pathname).toBe("/inbox");
+  });
+
+  it("added to and removed from a project share one Projects filter", async () => {
+    const user = userEvent.setup();
+    mount();
+    await user.click(await screen.findByRole("button", { name: "Filter by kind" }));
+    const radios = await screen.findAllByRole("menuitemradio");
+    expect(radios.map((r) => r.textContent).sort()).toEqual([
+      "All notifications",
+      "Projects",
+      "Questions",
+    ]);
+    screen.getByRole("menuitemradio", { name: "Projects" }).focus();
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(rows()).toHaveLength(4));
+    expect(
+      rows()
+        .map((r) => r.textContent)
+        .join(" "),
+    ).toContain("Removed r");
+    expect(
+      rows()
+        .map((r) => r.textContent)
+        .join(" "),
+    ).not.toContain("which quarter");
   });
 
   it("a question knock wears its own kind in the detail pane", async () => {

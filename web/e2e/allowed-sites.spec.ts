@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { expect, knownBug, test } from "./fixtures";
+import { expect, test } from "./fixtures";
 
 // Allowed sites: the hosts the computer's browser opens without asking. A fresh account starts
 // with none, and every change is the server's (a reload reads it back).
@@ -50,10 +50,6 @@ test.describe("allowed sites", () => {
   });
 
   test("adding a host that is already allowed lists it once", async ({ accountPage: page }) => {
-    knownBug(
-      "allowed-sites/route.tsx prepends the row the API returns even when the host was already " +
-        "allowed (the API answers with the existing row), so the host shows twice until a reload",
-    );
     await page.goto("/allowed-sites");
     const host = page.getByRole("textbox", { name: "Host" });
     for (let i = 0; i < 2; i++) {

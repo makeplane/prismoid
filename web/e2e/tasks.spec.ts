@@ -5,7 +5,7 @@
  */
 
 import type { Page } from "@playwright/test";
-import { escapeRegExp, expect, knownBug, test, toast } from "./fixtures";
+import { escapeRegExp, expect, test, toast } from "./fixtures";
 import {
   ApiError,
   call,
@@ -225,11 +225,6 @@ test.describe("task list", () => {
     accountPage: page,
     account,
   }) => {
-    knownBug(
-      "web/app/components/tasks/task-browser/browser.tsx:288 - the status counts effect leaves " +
-        "filters.archived (and refreshTick) out of its deps, so switching to Archived keeps the " +
-        "active totals in the group headers",
-    );
     const tasks = [];
     for (const goal of ["Compare the vendors", "Price the hardware", "Book the venue"])
       tasks.push(await createSettledTask(account.token, goal));

@@ -6,7 +6,7 @@
 
 import type { Page } from "@playwright/test";
 import { createHeldTask } from "./support/api";
-import { accountMenu, composer, escapeRegExp, expect, knownBug, test, toast } from "./fixtures";
+import { accountMenu, composer, escapeRegExp, expect, test, toast } from "./fixtures";
 
 // The app shell: the sidebar's nav, its collapse, the global chords, the account menu and the
 // recent-task rows. Every flow runs on a fresh account, so its sidebar holds only what it made.
@@ -136,11 +136,6 @@ test.describe("app shell", () => {
     accountPage: page,
     account,
   }) => {
-    knownBug(
-      "web/app/components/tasks/task-window.tsx:206 drops the row before the DELETE answers and " +
-        "never puts it back when the server refuses (409 for a task that is not settled), so the " +
-        "sidebar hides a task that still exists until the next navigation",
-    );
     const task = await createHeldTask(account.token, "Summarize the tide pool field notes");
     await page.goto("/allowed-sites");
     await page.getByRole("button", { name: `Task actions for ${task.title}` }).click();

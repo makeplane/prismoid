@@ -133,6 +133,7 @@ export function ReasonDialog({
   description,
   placeholder,
   confirmLabel,
+  minLength = 1,
   onConfirm,
 }: {
   /** A label for the stock danger-outline trigger, or the trigger element itself. */
@@ -141,12 +142,14 @@ export function ReasonDialog({
   description: ReactNode;
   placeholder: string;
   confirmLabel: string;
+  /** The shortest reason the door accepts (its serializer's min_length): the confirm waits for it. */
+  minLength?: number;
   onConfirm: (reason: string) => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
-  const ready = reason.trim().length > 0;
+  const ready = reason.trim().length >= minLength;
 
   async function run() {
     if (!ready) return;
@@ -197,6 +200,7 @@ export function ReasonDialog({
               value={reason}
               onChange={(e) => setReason(e.currentTarget.value)}
               placeholder={placeholder}
+              hint={minLength > 1 ? `At least ${minLength} characters.` : undefined}
               autoResize
               autoFocus
             />

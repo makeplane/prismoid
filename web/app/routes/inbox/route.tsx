@@ -76,6 +76,7 @@ import {
   routineTarget,
 } from "./target";
 import type { Route } from "./+types/route";
+import { listOwnsKeys, ROW_ATTR } from "./keys";
 
 // The list pane is a real pane: draggable width (the divider IS the slider), persisted,
 // double-click restores the default. The topbar's divider + icon cluster ride the same
@@ -98,7 +99,8 @@ type Item = Awaited<ReturnType<typeof clientLoader>>["items"][number];
 
 // The wire kinds, with the glyph and the human word for each. "All" and "Unread" are views,
 // not kinds - the chips mix both, the way Linear's inbox filters read.
-const KIND_META: Record<string, { label: string; icon: typeof HelpCircle }> = {
+// `filter` folds a kind under another kind's filter item, so the menu never shows two the same.
+const KIND_META: Record<string, { label: string; icon: typeof HelpCircle; filter?: string }> = {
   task_completed: { label: "Delivered", icon: CheckCircle2 },
   // Approval gates write this kind; the item points at its gate
   // and the task pane answers it in place.
@@ -109,7 +111,7 @@ const KIND_META: Record<string, { label: string; icon: typeof HelpCircle }> = {
   budget: { label: "Budget", icon: CircleDollarSign },
   project_shared: { label: "Projects", icon: FolderKanban },
   // Removed from a Project: no open affordance - the room is not this person's any more.
-  project_removed: { label: "Projects", icon: FolderKanban },
+  project_removed: { label: "Projects", icon: FolderKanban, filter: "project_shared" },
   // Someone other than the owner asked a bot for work; Open lands on the bot's chat, where the
   // card's Start / Not now decide it.
   card_waiting: { label: "Bot requests", icon: Bot },
@@ -130,6 +132,11 @@ const SETTLED_META: Record<string, { label: string; icon: typeof HelpCircle }> =
   partial: { label: "Partly done", icon: CircleDashed },
   could_not: { label: "Couldn't do it", icon: CircleSlash },
 };
+
+/** The filter item a kind sits under: its own, or the one its meta folds it into. */
+function filterOf(kind: string): string {
+  return KIND_META[kind]?.filter ?? kind;
+}
 
 function metaOf(item: Item) {
   const ending = (item.payload as { ending?: string } | null)?.ending;
@@ -190,9 +197,12 @@ export default function InboxRoute({ loaderData }: Route.ComponentProps) {
   };
 
   const unreadCount = items.filter((i) => !i.read).length;
-  const kindsPresent = useMemo(() => new Set(items.map((i) => i.kind)), [items]);
+  const kindsPresent = useMemo(() => new Set(items.map((i) => filterOf(i.kind))), [items]);
   const visible = useMemo(
-    () => items.filter((i) => (kind === "all" || i.kind === kind) && (!unreadOnly || !i.read)),
+    () =>
+      items.filter(
+        (i) => (kind === "all" || filterOf(i.kind) === kind) && (!unreadOnly || !i.read),
+      ),
     [items, kind, unreadOnly],
   );
   const selected = visible.find((i) => i.id === selectedId) ?? null;
@@ -234,11 +244,8 @@ export default function InboxRoute({ loaderData }: Route.ComponentProps) {
   // `[]` would have stapled the first render's stale `visible`/`selected` onto the closure.
   const onKeyRef = useRef<(e: KeyboardEvent) => void>(() => {});
   onKeyRef.current = (e: KeyboardEvent) => {
-    if (e.target instanceof HTMLElement) {
-      const tag = e.target.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || e.target.isContentEditable) return;
-    }
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp" && e.key !== "Enter") return;
+    if (!listOwnsKeys(e.target)) return;
     const idx = visible.findIndex((i) => i.id === selectedId);
     if (e.key === "Enter") {
       if (selected) openTarget(selected);
@@ -288,7 +295,7 @@ export default function InboxRoute({ loaderData }: Route.ComponentProps) {
               <MenuRadioGroup value={kind} onValueChange={setKind}>
                 <MenuRadioItem value="all" label="All notifications" />
                 {Object.entries(KIND_META)
-                  .filter(([k]) => kindsPresent.has(k))
+                  .filter(([k, meta]) => !meta.filter && kindsPresent.has(k))
                   .map(([k, meta]) => (
                     <MenuRadioItem
                       key={k}
@@ -372,6 +379,7 @@ export default function InboxRoute({ loaderData }: Route.ComponentProps) {
                 return (
                   <li key={item.id}>
                     <button
+                      {...{ [ROW_ATTR]: "" }}
                       onClick={() => select(item)}
                       onDoubleClick={() => openTarget(item)}
                       aria-current={selectedId === item.id}

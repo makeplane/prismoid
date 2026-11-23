@@ -141,6 +141,21 @@ describe("TaskComposer sending", () => {
     expect(screen.getByText("plan.pdf")).toBeTruthy();
   });
 
+  it("a file sent with no goal is refused and stays attached", async () => {
+    const user = userEvent.setup();
+    const err = vi.spyOn(toast, "error").mockImplementation((() => "") as never);
+    mount();
+    await user.upload(
+      document.querySelector("input[type=file]") as HTMLInputElement,
+      new File(["x"], "plan.pdf"),
+    );
+    await screen.findByText("plan.pdf");
+    await user.click(screen.getByRole("button", { name: "Submit" }));
+    await waitFor(() => expect(err).toHaveBeenCalledWith("Describe the task to start."));
+    expect(post).not.toHaveBeenCalled();
+    expect(screen.getByText("plan.pdf")).toBeTruthy();
+  });
+
   it("any other failure falls back to a plain message", async () => {
     const user = userEvent.setup();
     const err = vi.spyOn(toast, "error").mockImplementation((() => "") as never);
