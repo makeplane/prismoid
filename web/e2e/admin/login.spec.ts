@@ -6,7 +6,7 @@
 
 import { signUp } from "../support/accounts";
 import { call } from "../support/api";
-import { expect, test } from "../fixtures";
+import { escapeRegExp, expect, test } from "../fixtures";
 
 // The operator console's front door: its own app, whose login refuses any account without the admin
 // scope, and whose shell re-proves the scope on every load. The seeded operator's session is shared
@@ -69,9 +69,7 @@ test.describe("operator console sign-in", () => {
     await expect(page.getByRole("heading", { name: "Health" })).toBeVisible();
 
     // The sidebar's footer names the operator and signs this browser out in one click.
-    await page
-      .getByRole("button", { name: new RegExp(operator.email.replace(/[.+]/g, "\\$&")) })
-      .click();
+    await page.getByRole("button", { name: new RegExp(escapeRegExp(operator.email)) }).click();
     await expect(page).toHaveURL(/\/login/);
     await page.goto("/");
     await expect(page).toHaveURL(/\/login/);

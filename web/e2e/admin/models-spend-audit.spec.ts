@@ -6,7 +6,7 @@
 
 import { signUp } from "../support/accounts";
 import { call, stamp } from "../support/api";
-import { expect, test, toast } from "../fixtures";
+import { escapeRegExp, expect, test, toast } from "../fixtures";
 
 // The model catalog, the ledger and the audit trail. The catalog and the price book are global, so
 // a flow only ever changes a model it added itself (a stamped id under a made-up provider): it
@@ -105,7 +105,7 @@ test.describe("console models", () => {
       await save.click();
       const saved = toast(
         page,
-        new RegExp(`^Price book v(\\d+) - ${ref.replace(/[.:-]/g, "\\$&")} repriced\\.$`),
+        new RegExp(`^Price book v(\\d+) - ${escapeRegExp(ref)} repriced\\.$`),
       );
       await expect(saved).toBeVisible();
       const after = Number((await saved.textContent())!.match(/v(\d+)/)![1]);

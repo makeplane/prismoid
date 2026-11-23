@@ -6,7 +6,7 @@
 
 import { signUp } from "../support/accounts";
 import { call, createHeldTask, stamp } from "../support/api";
-import { expect, test, toast } from "../fixtures";
+import { escapeRegExp, expect, test, toast } from "../fixtures";
 
 // The task console: every task in the system, searchable and sliced by status, with a peek that
 // reads the durable record and an operator's one hard verb, cancel. The tasks here are held (a
@@ -71,7 +71,7 @@ test.describe("console tasks", () => {
     await page.goto(`/tasks?q=${task.id}`);
     await page
       .getByRole("main")
-      .getByRole("button", { name: new RegExp(task.title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")) })
+      .getByRole("button", { name: new RegExp(escapeRegExp(task.title)) })
       .click();
     await expect(page).toHaveURL(new RegExp(`task=${task.id}`));
 

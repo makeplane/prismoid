@@ -8,7 +8,7 @@ import type { Page } from "@playwright/test";
 import { type Account, joinWorkspace, pageFor, signUp, verifyEmail } from "./support/accounts";
 import { call, createProject, stamp } from "./support/api";
 import { mailAvailable } from "./support/mailbox";
-import { expect, section, test } from "./fixtures";
+import { escapeRegExp, expect, section, test } from "./fixtures";
 
 // A project's people (ADR-062): the owner adds someone from the workspace by email or hands them
 // a single-use invite link, changes their role and removes them. Every person here must belong to
@@ -232,9 +232,7 @@ test.describe("project members", () => {
       const anon = await context.newPage();
       await anon.goto(path);
       await expect(anon).toHaveURL(
-        new RegExp(
-          `/login\\?next=${encodeURIComponent(path).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
-        ),
+        new RegExp(`/login\\?next=${escapeRegExp(encodeURIComponent(path))}$`),
       );
       await anon.getByRole("textbox", { name: "Email" }).fill(mate.email);
       await anon.getByRole("textbox", { name: "Password" }).fill(mate.password);
