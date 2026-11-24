@@ -1,8 +1,9 @@
-# The browser smoke flows (ADR-081): `just e2e` on a fresh runner. It starts its own Postgres and
-# Silo (S3) containers, the worker and the API, builds and serves the web app, and drives sign-in, a
-# project, settings, the design-system page and a task record in Chromium. No flow calls a model,
-# so the job needs no secret and runs the same on a fork. Not on every PR: nightly, or by hand
-# (Actions -> E2E smoke flows -> Run workflow).
+# The browser flows (ADR-081): `just e2e` on a fresh runner. It starts its own Postgres and Silo
+# (S3) containers, the worker and the API, builds and serves the web app and the operator console,
+# and drives every surface a person reaches without a model run in Chromium. Every provider key is
+# blanked and no flow calls a model, so the job needs no secret and runs the same on a fork. Not on
+# every PR: nightly, or by hand (Actions -> E2E smoke flows -> Run workflow). The flows that call a
+# real model run separately, by hand only: e2e-models.yml.
 name: E2E smoke flows
 
 on:

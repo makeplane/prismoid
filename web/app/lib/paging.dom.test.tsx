@@ -167,4 +167,19 @@ describe("useKeysetList", () => {
     });
     await waitFor(() => expect(ids(result.current.items)).toEqual(["c", "b", "a"]));
   });
+
+  it("refresh() re-reads the head on demand, with no poll set", async () => {
+    let n = 0;
+    const fetchPage = vi.fn(async () => {
+      n += 1;
+      return n === 1
+        ? { items: [row("b", "2"), row("a", "1")], next_cursor: null }
+        : { items: [row("c", "3"), row("b", "2")], next_cursor: null };
+    });
+    const { result } = setup(fetchPage);
+    await waitFor(() => expect(result.current.items?.length).toBe(2));
+    await act(() => result.current.refresh());
+    expect(fetchPage).toHaveBeenCalledTimes(2);
+    expect(ids(result.current.items)).toEqual(["c", "b", "a"]);
+  });
 });

@@ -8,7 +8,7 @@
 // A bot's Channels tab, driven: the list shows each door's status and limits, Add webhook mints
 // one and shows its token once, rotate swaps the token, disable/enable hit the right verb, and
 // remove deletes the door.
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "~/lib/api/client";
@@ -129,5 +129,21 @@ describe("Channel actions", () => {
       params: { path: { channel_id: "c1" } },
     });
     expect(await screen.findByText("No doors yet")).toBeTruthy();
+  });
+
+  it("removing a door takes its shown-once token away with it", async () => {
+    const user = userEvent.setup();
+    rows = [channel("c1"), channel("c2")];
+    post.mockResolvedValueOnce(ok(channel("c1", { token: "bc_new" })) as never);
+    del.mockImplementationOnce((() => {
+      rows = [channel("c2")];
+      return Promise.resolve(ok({}));
+    }) as never);
+    render(<ChannelsTab name="scout" projectId={null} />);
+    await user.click((await screen.findAllByRole("button", { name: "Rotate the token" }))[0]);
+    expect(await screen.findByText("bc_new")).toBeTruthy();
+    await user.click(screen.getAllByRole("button", { name: "Remove the channel" })[0]);
+    await waitFor(() => expect(screen.queryByText("Door c1")).toBeNull());
+    expect(screen.queryByText("bc_new")).toBeNull();
   });
 });

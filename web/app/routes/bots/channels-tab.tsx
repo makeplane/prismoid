@@ -87,6 +87,8 @@ export function ChannelsTab({ name, projectId }: { name: string; projectId: stri
         api.DELETE("/v1/channels/{channel_id}", { params: { path: { channel_id: id } } }),
       );
       toast.success("Channel removed, ledger and all.");
+      // Its token died with it: stop showing it.
+      setMinted((cur) => (cur?.id === id ? null : cur));
       await reload();
     } catch (e) {
       toastError(e, "Couldn't remove it.");

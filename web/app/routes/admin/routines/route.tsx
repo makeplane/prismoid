@@ -27,7 +27,7 @@ export function meta() {
 
 const STATUS_TONE = { active: "success", paused: "warning", retired: "muted" } as const;
 
-function PauseVerb({ r }: { r: RoutineRow }) {
+function PauseVerb({ r, onPaused }: { r: RoutineRow; onPaused: () => void }) {
   return (
     // Only stops the row's click; the dialog's own trigger is the control.
     <span role="presentation" onClick={(e) => e.stopPropagation()}>
@@ -44,6 +44,7 @@ function PauseVerb({ r }: { r: RoutineRow }) {
         description="Its clock and doors stop immediately; the owner is told, with your reason, and only they can resume it."
         placeholder="Why is the operator stopping this routine?"
         confirmLabel="Pause routine"
+        minLength={3}
         onConfirm={async (reason) => {
           try {
             await unwrap(
@@ -53,6 +54,7 @@ function PauseVerb({ r }: { r: RoutineRow }) {
               }),
             );
             toast.success("Paused. Audited, and the owner has the note.");
+            onPaused();
           } catch (e) {
             toastError(e, "Couldn't pause it.");
             throw e;
@@ -80,7 +82,7 @@ const config: ResourceListConfig<RoutineRow> = {
   orderKey: (r) => r.created_at,
   rowKey: (r) => r.id,
   onRow: () => undefined, // observation rows; the one verb rides inline
-  row: (r) => (
+  row: (r, list) => (
     <>
       <AlarmClock className="text-muted-foreground size-4 shrink-0" />
       <span className="min-w-0 flex-1">
@@ -102,7 +104,7 @@ const config: ResourceListConfig<RoutineRow> = {
         {r.last_fired_at ? ` · last ${ago(r.last_fired_at)}` : ""}
       </span>
       <Pill tone={STATUS_TONE[r.status as keyof typeof STATUS_TONE] ?? "muted"}>{r.status}</Pill>
-      {r.status === "active" && <PauseVerb r={r} />}
+      {r.status === "active" && <PauseVerb r={r} onPaused={() => void list.refresh()} />}
     </>
   ),
   search: { placeholder: "Search routine names…", topbar: true },

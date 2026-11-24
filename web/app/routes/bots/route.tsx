@@ -143,11 +143,14 @@ export default function Bots({ loaderData }: Route.ComponentProps) {
   const revalidator = useRevalidator();
   const [q, setQ] = useState("");
   const needle = q.trim().toLowerCase();
-  const rows = heads(items).filter(
+  const all = heads(items);
+  const rows = all.filter(
     (r) =>
       !needle || r.head.name.includes(needle) || r.head.description.toLowerCase().includes(needle),
   );
-  const current = selected ? rows.find((r) => r.head.name === selected) : undefined;
+  // The open bot comes from every bot, not the search's rows: a search narrows the list and
+  // never closes the pane (or remounts it, which threw away unsaved Configure edits).
+  const current = selected ? all.find((r) => r.head.name === selected) : undefined;
   const pinnedCount = rows.filter((r) => r.head.pinned).length;
 
   return (

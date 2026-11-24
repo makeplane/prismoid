@@ -169,6 +169,21 @@ describe("Settings", () => {
     expect(patchBody()).toMatchObject({ clear_budget: true });
   });
 
+  it("saving the name keeps a budget edit not saved yet", async () => {
+    const user = userEvent.setup();
+    mount({ tab: "settings", proj: project({ budget_usd: "10" }) });
+    const budget = await screen.findByRole("textbox", { name: "Budget in USD" });
+    await user.clear(budget);
+    await user.type(budget, "40");
+    const name = screen.getByRole("textbox", { name: "Project name" });
+    await user.clear(name);
+    await user.type(name, "Atlas 2{Enter}");
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(1));
+    expect(patchBody()).not.toHaveProperty("budget_usd");
+    await waitFor(() => expect((name as HTMLInputElement).value).toBe("Atlas 2"));
+    expect((budget as HTMLInputElement).value).toBe("40");
+  });
+
   it("shows the month's spend against the ceiling", async () => {
     mount({ tab: "settings", proj: project({ budget_usd: "10" }) });
     expect(await screen.findByText(/this month/)).toBeTruthy();

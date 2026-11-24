@@ -4,13 +4,15 @@
  * See the LICENSE file for details.
  */
 
-// What the flows share: one account and one task record, made through the API before any test
-// runs (global-setup.ts) and read back by every spec. Nothing here calls a model.
+// What the flows share: one account with one held task, made through the API before any test runs
+// (global-setup.ts) and read back by every spec, plus the operator account the console flows sign in
+// with when the stack let global-setup make one. Nothing here calls a model.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-export const API_URL = process.env.E2E_API_URL ?? "http://127.0.0.1:8304";
-export const SEED_FILE = fileURLToPath(new URL("./.state/seed.json", import.meta.url));
+/** E2E_STATE_DIR moves the run's state, so two runs against one stack never share a seed file. */
+const STATE_DIR = process.env.E2E_STATE_DIR ?? fileURLToPath(new URL("./.state", import.meta.url));
+export const SEED_FILE = `${STATE_DIR}/seed.json`;
 
 export type Seed = {
   email: string;
@@ -20,27 +22,10 @@ export type Seed = {
   expiresAt: string;
   /** A routine fired with posture "hold": its task exists, is held, and never runs. */
   task: { id: string; title: string; goal: string };
+  /** An account holding the operator scope, or null when this process cannot grant one. */
+  admin: { email: string; password: string; name: string; token: string; expiresAt: string } | null;
 };
 
 export function readSeed(): Seed {
   return JSON.parse(readFileSync(SEED_FILE, "utf8")) as Seed;
-}
-
-/** One API call with the seed's bearer; throws on any status outside 2xx, naming the body. */
-export async function call<T>(
-  path: string,
-  init: { method?: string; token?: string; body?: unknown } = {},
-): Promise<T> {
-  const response = await fetch(`${API_URL}/v1${path}`, {
-    method: init.method ?? "GET",
-    headers: {
-      "content-type": "application/json",
-      ...(init.token ? { authorization: `Bearer ${init.token}` } : {}),
-    },
-    body: init.body === undefined ? undefined : JSON.stringify(init.body),
-  });
-  const text = await response.text();
-  if (!response.ok)
-    throw new Error(`${init.method ?? "GET"} ${path} -> ${response.status}: ${text}`);
-  return (text ? JSON.parse(text) : undefined) as T;
 }

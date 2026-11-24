@@ -284,8 +284,10 @@ export function TaskBrowser({
       live = false;
       window.clearInterval(id);
     };
+    // The lists' own deps (archived and the bulk refresh lever included), so the totals always
+    // count the rows the headers sit over.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- scope is identity-fresh; its parts are the deps
-  }, [byStatus, dq, filters.project, filters.mode, projectId]);
+  }, [byStatus, ...filterDeps]);
 
   const groupCount = (g: GroupDef) =>
     counts === null ? null : g.statuses.reduce((n, s) => n + (counts[s] ?? 0), 0);

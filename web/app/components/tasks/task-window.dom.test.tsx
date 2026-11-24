@@ -196,7 +196,7 @@ describe("TaskWindowProvider", () => {
     expect(del.mock.calls[0][1]).toEqual({ params: { path: { task_id: "r1" } } });
   });
 
-  it("a failed delete returns false", async () => {
+  it("a failed delete returns false and puts the row back where it was", async () => {
     vi.spyOn(toast, "error").mockImplementation((() => "") as never);
     vi.spyOn(api, "DELETE").mockImplementation((() => Promise.reject(new Error("x"))) as never);
     const { result } = hook(SEED);
@@ -205,6 +205,11 @@ describe("TaskWindowProvider", () => {
       ok = await result.current.remove("r1");
     });
     expect(ok).toBe(false);
+    expect(result.current.recents.map((r) => r.id)).toEqual(["r1", "r2"]);
+    await act(async () => {
+      await result.current.remove("p1");
+    });
+    expect(result.current.pins.map((r) => r.id)).toEqual(["p1"]);
   });
 
   it("patch writes what a live surface knows into the matching row", async () => {

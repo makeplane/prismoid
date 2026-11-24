@@ -58,7 +58,8 @@ export function mutateLoaded<T>(current: T[] | null, fn: (items: T[]) => T[]): T
  * - `loadMore()` appends the next page, id-deduped.
  * - `refreshMs` keeps the HEAD live: page one is re-read and spliced over the loaded head at
  *   the keyset boundary, so already-loaded tail pages survive the poll. Status changes happen
- *   to recent tasks, and recent is exactly what page one holds (newest-first).
+ *   to recent tasks, and recent is exactly what page one holds (newest-first). `refresh()` is
+ *   the same re-read on demand: after a mutation whose answer carries no row to `mutate` in.
  * - `initial` seeds from a route loader so hydration paints data, not a spinner.
  */
 export function useKeysetList<T extends { id: string }>(opts: {
@@ -111,30 +112,33 @@ export function useKeysetList<T extends { id: string }>(opts: {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- deps ARE the dependency list
   }, [enabled, ...deps]);
 
+  const refresh = useCallback(async () => {
+    const token = seq.current;
+    try {
+      const page = await fetchRef.current(null);
+      if (token !== seq.current) return; // the query changed mid-flight
+      setItems((cur) => {
+        if (cur === null) return page.items;
+        const next = spliceHead(cur, page.items, orderRef.current);
+        // With no surviving tail the list IS page one - adopt its cursor, or new rows
+        // past the page boundary would be unreachable until a reload.
+        if (next.length === page.items.length && cursorRef.current === null) {
+          setCursor(page.next_cursor ?? null);
+        }
+        return next;
+      });
+    } catch {
+      /* transient - keep what we have */
+    }
+  }, []);
+
   useEffect(() => {
     if (!refreshMs || !enabled) return;
-    const id = window.setInterval(async () => {
-      if (document.hidden) return;
-      const token = seq.current;
-      try {
-        const page = await fetchRef.current(null);
-        if (token !== seq.current) return; // the query changed mid-flight
-        setItems((cur) => {
-          if (cur === null) return page.items;
-          const next = spliceHead(cur, page.items, orderRef.current);
-          // With no surviving tail the list IS page one - adopt its cursor, or new rows
-          // past the page boundary would be unreachable until a reload.
-          if (next.length === page.items.length && cursorRef.current === null) {
-            setCursor(page.next_cursor ?? null);
-          }
-          return next;
-        });
-      } catch {
-        /* transient - keep what we have */
-      }
+    const id = window.setInterval(() => {
+      if (!document.hidden) void refresh();
     }, refreshMs);
     return () => window.clearInterval(id);
-  }, [refreshMs, enabled]);
+  }, [refreshMs, enabled, refresh]);
 
   const loadMore = useCallback(async () => {
     const at = cursorRef.current;
@@ -160,5 +164,5 @@ export function useKeysetList<T extends { id: string }>(opts: {
     setItems((cur) => mutateLoaded(cur, fn));
   }, []);
 
-  return { items, loadMore, loadingMore, hasMore: cursor !== null, mutate };
+  return { items, loadMore, loadingMore, hasMore: cursor !== null, mutate, refresh };
 }

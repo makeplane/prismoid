@@ -18,6 +18,7 @@ import datetime as dt
 
 import pytest
 
+from prismoid.api.serializers.memories import memory_out
 from prismoid.db.models.memory import Memory, MemoryKind, MemoryScope, MemoryStatus
 from prismoid.db.models.project_member import ProjectMember
 from prismoid.db.session import session_scope
@@ -57,9 +58,12 @@ async def test_user_scope_is_private_and_retire_keeps_the_row() -> None:
 
         edited = await ops.update(session, alice, row.id, text="Prefers one-page memos.")
         assert edited.text == "Prefers one-page memos."
+        # The API serializes the row it gets back: its re-dated updated_at must already be loaded.
+        assert memory_out(edited).updated_at >= row.created_at
 
         retired = await ops.retire(session, alice, row.id)
         assert retired.status == MemoryStatus.RETIRED.value
+        assert memory_out(retired).status == MemoryStatus.RETIRED.value
         assert await ops.list_memories(session, alice, scope=MemoryScope.USER) == [], "active list hides it"
         lineage = await ops.list_memories(session, alice, scope=MemoryScope.USER, status=None)
         assert [m.id for m in lineage] == [row.id], "retire keeps the row - nothing is deleted"

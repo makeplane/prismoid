@@ -42,7 +42,7 @@ import { useMe } from "./use-workspace";
 
 type Member = components["schemas"]["WorkspaceMemberOut"];
 type Invite = components["schemas"]["WorkspaceInviteOut"];
-type Act<A extends unknown[] = []> = (...a: A) => void | Promise<void>;
+type Act<A extends unknown[] = []> = (...a: A) => void | Promise<unknown>;
 
 export function MembersView({
   myId,
@@ -62,7 +62,8 @@ export function MembersView({
   invites: Invite[];
   onRole: Act<[actorId: string, role: string]>;
   onRemove: Act<[actorId: string]>;
-  onInvite: Act<[email: string, role: string]>;
+  /** Resolves true once the invite is sent; a refusal (already toasted) resolves false. */
+  onInvite: (email: string, role: string) => Promise<boolean>;
   onRevoke: Act<[inviteId: string]>;
   onLeave: Act;
   onTransfer: Act<[actorId: string]>;
@@ -167,7 +168,13 @@ export function MembersView({
   );
 }
 
-function InviteDialog({ role, onInvite }: { role: string; onInvite: Act<[string, string]> }) {
+function InviteDialog({
+  role,
+  onInvite,
+}: {
+  role: string;
+  onInvite: (email: string, role: string) => Promise<boolean>;
+}) {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [as, setAs] = useState("member");
@@ -176,7 +183,8 @@ function InviteDialog({ role, onInvite }: { role: string; onInvite: Act<[string,
   async function send() {
     setBusy(true);
     try {
-      await onInvite(email.trim(), as);
+      // A refused invite keeps the dialog and the typed address, so the person can fix and resend.
+      if (!(await onInvite(email.trim(), as))) return;
       setOpen(false);
       setEmail("");
     } finally {
@@ -273,13 +281,18 @@ export function WorkspaceMembersPanel() {
   if (!workspace) return <NoWorkspaceState />;
   if (!members) return <LoadingState />;
 
+  /** Call a door, say how it went, reload the roster: true when it went through. */
   const run = (fn: () => Promise<unknown>, fail: string, ok?: string) =>
     fn().then(
       () => {
         if (ok) toast.success(ok);
         load();
+        return true;
       },
-      (e) => toastError(e, fail),
+      (e) => {
+        toastError(e, fail);
+        return false;
+      },
     );
   const member = (actor_id: string) => ({
     params: { path: { workspace_id: workspace.id, actor_id } },

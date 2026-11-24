@@ -115,7 +115,7 @@ cannot pass a dry run with Caddy's `local_certs`.
 | Before a workstream merges | `just test`: the whole backend suite, integration tests included (needs `just up`; refuses while `just dev` runs) |
 | A sandbar change | `just sandbar-check` |
 | A user-visible change | One real run: `just smoke` or the CLI flow. An agent, prompt or skill change adds `just evals` |
-| The drills | Nightly in CI: evals, `just perf`, `just e2e`, the frame integration tests. Weekly: `just chaos`. On demand: `just load`, `just endurance`, `just backup-restore`, `just fresh-clone`, `just range` |
+| The drills | Nightly in CI: evals, `just perf`, `just e2e` (the browser flows over every surface reachable without a model run, the operator console included; a flow marked `knownBug` names a bug still open, ADR-081), the frame integration tests. Weekly: `just chaos`. On demand: `just e2e-models` (the browser flows on a real model; needs a provider key, also Actions -> E2E model flows), `just load`, `just endurance`, `just backup-restore`, `just fresh-clone`, `just range` |
 
 Red means stop and fix it before new work.
 

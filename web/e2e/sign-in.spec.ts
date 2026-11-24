@@ -35,4 +35,32 @@ test.describe("sign-in", () => {
     await page.goto("/tasks");
     await expect(page).toHaveURL(/\/login/);
   });
+
+  // The page signs in a fresh account (not the shared one): the login door counts sign-ins per
+  // account, and this run's other form sign-ins already spend the shared account's.
+  test("a signed-out deep link comes back to its page after sign-in", async ({ page, account }) => {
+    await page.goto("/projects");
+    await expect(page).toHaveURL(/\/login\?next=%2Fprojects$/);
+    await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
+
+    await page.getByRole("textbox", { name: "Email" }).fill(account.email);
+    await page.getByRole("textbox", { name: "Password" }).fill(account.password);
+    await page.getByRole("button", { name: "Sign in" }).click();
+
+    await expect(page).toHaveURL(/\/projects$/);
+    await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toHaveText("Projects");
+  });
+
+  test("the form's account link opens signup and keeps the way back", async ({ page }) => {
+    await page.goto("/projects");
+    await expect(page).toHaveURL(/\/login\?next=%2Fprojects$/);
+    await page.getByRole("link", { name: "Create an account" }).click();
+
+    // Someone without an account yet still lands where the link was taking them once they have one.
+    await expect(page).toHaveURL(/\/signup\?next=%2Fprojects$/);
+    await expect(page.getByRole("heading", { name: "Create your account" })).toBeVisible();
+    await page.getByRole("link", { name: "Sign in" }).click();
+    await expect(page).toHaveURL(/\/login\?next=%2Fprojects$/);
+    await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
+  });
 });

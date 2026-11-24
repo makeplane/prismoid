@@ -45,8 +45,10 @@ type ActionResult = {
   paused?: boolean;
 };
 
-/** What a refused signup shows: field errors, the paused page, or a message. */
-function refusal(e: ApiError) {
+/** What a refused signup shows: field errors, the paused page, or a message. Any other 403 is the
+ *  server's deliberately vague refusal of the address (it never says whether an account exists),
+ *  or, with an invite, of an address the invite was not sent to: the form says so in its own words. */
+function refusal(e: ApiError, invited: boolean) {
   if (e.status === 422 && e.fields) {
     return data<ActionResult>({ fieldErrors: e.fields, formError: null }, { status: 422 });
   }
@@ -54,11 +56,15 @@ function refusal(e: ApiError) {
     return data<ActionResult>({ fieldErrors: {}, formError: null, paused: true }, { status: 403 });
   }
   const formError =
-    e.status === 409
-      ? "An account with that email already exists."
-      : e.status === 429
-        ? `Too many attempts. Try again in ${e.retryAfter ?? 30}s.`
-        : e.message;
+    e.status === 403
+      ? invited
+        ? "That email can't use this invite. Use the address it was sent to, or sign in if that email already has an account."
+        : "That email can't be used to sign up. If it already has an account, sign in instead."
+      : e.status === 409
+        ? "An account with that email already exists."
+        : e.status === 429
+          ? `Too many attempts. Try again in ${e.retryAfter ?? 30}s.`
+          : e.message;
   return data<ActionResult>({ fieldErrors: {}, formError }, { status: e.status });
 }
 
@@ -91,7 +97,7 @@ export async function clientAction({ request }: Route.ClientActionArgs) {
     throw redirect(next);
   } catch (e) {
     if (e instanceof Response) throw e;
-    if (e instanceof ApiError) return refusal(e);
+    if (e instanceof ApiError) return refusal(e, Boolean(invite));
     return data<ActionResult>(
       { fieldErrors: {}, formError: "Something went wrong. Please try again." },
       { status: 500 },

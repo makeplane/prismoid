@@ -202,19 +202,24 @@ export function TaskWindowProvider({
     }
   }, []);
 
-  const remove = useCallback(async (id: string): Promise<boolean> => {
-    // Drop the row immediately; a delete is a decision, and a lingering row reads as failure.
-    // On error the window refetches on the next navigation, so a false optimistic removal heals.
-    setPins((current) => current.filter((item) => item.id !== id));
-    setRecents((current) => current.filter((item) => item.id !== id));
-    try {
-      await unwrap(api.DELETE("/v1/tasks/{task_id}", { params: { path: { task_id: id } } }));
-      return true;
-    } catch (error) {
-      toastError(error, "Couldn't delete the task.");
-      return false;
-    }
-  }, []);
+  const remove = useCallback(
+    async (id: string): Promise<boolean> => {
+      // Drop the row immediately; a delete is a decision, and a lingering row reads as failure.
+      // A refusal (a live task answers 409) puts it back where it was: the task still exists.
+      const row = [...pins, ...recents].find((item) => item.id === id);
+      setPins((current) => current.filter((item) => item.id !== id));
+      setRecents((current) => current.filter((item) => item.id !== id));
+      try {
+        await unwrap(api.DELETE("/v1/tasks/{task_id}", { params: { path: { task_id: id } } }));
+        return true;
+      } catch (error) {
+        if (row) (row.pinned ? setPins : setRecents)((current) => insertByRecency(current, row));
+        toastError(error, "Couldn't delete the task.");
+        return false;
+      }
+    },
+    [pins, recents],
+  );
 
   const latest = useMemo(() => mergeTaskWindow(pins, recents), [pins, recents]);
   const value = useMemo(

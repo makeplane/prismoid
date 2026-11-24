@@ -44,7 +44,8 @@ the config states only what is resource-shaped:
   renders when filters exist. Ship exactly what the wire supports - never fake a dimension
   the API can't filter.
 - **Keyset paging** - `useKeysetList` wiring (`app/lib/paging.ts`), `LoadMore`, optional
-  head-refresh polling via `refreshMs`.
+  head-refresh polling via `refreshMs`, and the same re-read on demand: `row(item, { refresh })`
+  hands it to an inline verb whose door answers no row (the routine pause).
 - **States** - `LoadingState`, `EmptyState` (the search-miss variant names the query).
 - **Row chrome** - the `Rows` list, hover wash, and the link (`rowTo`) or action (`onRow`)
   wrapper; the config's `row` renders only the content between them. The config type is a

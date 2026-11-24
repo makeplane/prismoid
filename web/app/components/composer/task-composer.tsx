@@ -100,6 +100,13 @@ function unprocessableReason(e: unknown, attached: Attachment[]): string | undef
 
 const noStartHook = () => {};
 
+/** Refuse a send before it leaves: say why, and reject, so the composer keeps what was typed and
+ *  attached (it clears its draft only on a resolved send, composer.tsx). */
+function refuse(reason: string): never {
+  toast.error(reason);
+  throw new Error(reason);
+}
+
 export function TaskComposer({
   options,
   initialProject = null,
@@ -220,25 +227,16 @@ export function TaskComposer({
 
   async function start({ text, attachments }: { text: string; attachments: Attachment[] }) {
     const goal = text.trim();
-    if (!goal) {
-      toast.error("Describe the task to start.");
-      return;
-    }
-    setBusy(true);
+    if (!goal) refuse("Describe the task to start.");
     // A standing When branches here: the SAME payload posts as a routine (the constitution -
     // the composer, saved instead of sent). Fleet seats and attachments have no standing
     // shape yet, so the refusal is honest and immediate rather than a 422 later.
     if (when.mode !== "now") {
-      if (mode === "fleet") {
-        setBusy(false);
-        toast.error("Routines run standard tasks. Switch the mode dial off fleet first.");
-        return;
-      }
-      if (attachments.length) {
-        setBusy(false);
-        toast.error("Routines can't carry attachments yet - each run starts fresh.");
-        return;
-      }
+      if (mode === "fleet")
+        refuse("Routines run standard tasks. Switch the mode dial off fleet first.");
+      if (attachments.length)
+        refuse("Routines can't carry attachments yet - each run starts fresh.");
+      setBusy(true);
       try {
         const saved = await unwrap(
           api.POST("/v1/routines", {
@@ -271,6 +269,7 @@ export function TaskComposer({
       }
       return;
     }
+    setBusy(true);
     const body: TaskCreateIn = {
       goal,
       mode,

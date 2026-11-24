@@ -103,6 +103,22 @@ describe("WorkspaceMembersPanel", () => {
     );
   });
 
+  it("a refused invite keeps the dialog open with the typed address", async () => {
+    post.mockImplementation((() => failure(422, "that address cannot be invited")) as never);
+    const user = userEvent.setup();
+    render(<WorkspaceMembersPanel />);
+    await screen.findByText("Person bob");
+    await user.click(screen.getByRole("button", { name: "Invite" }));
+    const dialog = await screen.findByRole("dialog");
+    const email = within(dialog).getByRole("textbox", { name: "Email" });
+    await user.type(email, "ada@example.com");
+    await user.click(within(dialog).getByRole("button", { name: "Send invite" }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect((email as HTMLInputElement).value).toBe("ada@example.com");
+  });
+
   it("revokes a pending invite", async () => {
     const user = userEvent.setup();
     render(<WorkspaceMembersPanel />);

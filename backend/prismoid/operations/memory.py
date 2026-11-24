@@ -171,7 +171,7 @@ async def update(
         row.text = body
     if kind is not None:
         row.kind = kind.value
-    await session.commit()
+    await _commit_redated(session, row)
     return row
 
 
@@ -183,9 +183,17 @@ async def retire(session: AsyncSession, actor: Actor, memory_id: uuid.UUID) -> M
     await _authorise(session, actor, row, write=True)
 
     row.status = MemoryStatus.RETIRED.value
-    await session.commit()
+    await _commit_redated(session, row)
     logfire.info("memory {id} retired", id=str(memory_id))
     return row
+
+
+async def _commit_redated(session: AsyncSession, row: Memory) -> None:
+    """Commit an edit and read back the `updated_at` Postgres re-dated it to. The ORM fetches a
+    server default after an INSERT but not after an UPDATE, so the column is left expired, and the
+    serializer's read of it would lazy-load outside the async greenlet (a 500 on a saved edit)."""
+    await session.commit()
+    await session.refresh(row, ["updated_at"])
 
 
 async def _authorise(session: AsyncSession, actor: Actor, row: Memory, *, write: bool) -> None:

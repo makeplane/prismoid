@@ -70,6 +70,19 @@ describe("AllowedSites", () => {
     expect((screen.getByRole("textbox", { name: "Host" }) as HTMLInputElement).value).toBe("");
   });
 
+  it("a host already allowed comes back as its row and is listed once", async () => {
+    const user = userEvent.setup();
+    post.mockImplementation((() => reply(200, row("1", "docs.vendor.com"))) as never);
+    mount([row("1", "docs.vendor.com")]);
+    await user.type(screen.getByRole("textbox", { name: "Host" }), "docs.vendor.com");
+    await user.click(screen.getByRole("button", { name: "Always allow" }));
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect((screen.getByRole("textbox", { name: "Host" }) as HTMLInputElement).value).toBe(""),
+    );
+    expect(screen.getAllByText("docs.vendor.com")).toHaveLength(1);
+  });
+
   it("a 422 puts the server's words under the field and typing clears them", async () => {
     const user = userEvent.setup();
     post.mockImplementation((() =>
