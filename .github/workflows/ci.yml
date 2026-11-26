@@ -9,7 +9,7 @@
 #   security     known vulnerabilities in the locked Python and JS dependencies, leaked secrets,
 #                and the license gate.
 # The frame tests (Docker, the frame images, the egress proxy) run nightly in integration-frames.yml;
-# the deep drills keep their own schedules (evals nightly, perf nightly, chaos weekly).
+# the deep drills keep their own schedules (evals weekly, perf nightly, chaos weekly).
 name: CI
 
 on:

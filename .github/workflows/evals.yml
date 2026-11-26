@@ -1,28 +1,40 @@
-# Nightly golden evals — the suite, against a real stack, with a run-over-run diff.
+# Weekly evals - a sample of the golden cases and the talk set, against a real stack, with a run-over-run diff.
 #
-# This is a real workflow, not a placeholder. What it needs before it can run — the human inputs the
-# build cannot supply for itself:
-#   • secrets: ANTHROPIC_API_KEY (the producer), and a SECOND frontier key of a different family
-#     (OPENAI_API_KEY here) so the cross-family judge is not the weak local qwen that rubber-stamps.
-# Ollama is not in CI, so the frontier judge is added from that second key; without it the run still
-# executes but the RubricJudge column is unverified.
+# Spend is bounded three ways (ADR-008, amended for cost):
+#   • cadence: weekly, and a scheduled run that finds nothing changed since the last green run skips
+#     (the fingerprint: the prompts every agent reads, the skills, the model catalog seed, the eval cases,
+#     the lockfile and this file). A change to engine code alone does not re-run it: dispatch by hand.
+#   • size: a seeded sample of the golden cases (20 of the 104 by default, the same 20 every week so the
+#     diff compares like with like) and of trivial50 (15 of 48).
+#   • a cap per golden task (0.50 USD by default, sent as the task's budget; the Bursar holds it).
+# The whole hundred runs by hand before a release: Run workflow with cases = 0.
 #
-# Trigger it by hand (Actions → Nightly golden evals → Run workflow) or let the schedule fire.
+# What it needs before it can run - the human inputs the build cannot supply for itself:
+#   • secrets: ANTHROPIC_API_KEY (the producer; the run refuses to start without it), and optionally a
+#     second frontier key of a different family (OPENAI_API_KEY here) so the judge is not the
+#     producer's own family. Without it the run still gates, and the RubricJudge column is unverified.
 
-name: Nightly golden evals
+name: Weekly evals
 
 on:
   schedule:
-    - cron: "0 7 * * *"   # 07:00 UTC nightly
+    - cron: "0 7 * * 1"   # Mondays, 07:00 UTC
   workflow_dispatch:
     inputs:
-      limit:
-        description: "How many golden cases to run"
-        default: "100"
+      cases:
+        description: "Golden cases to sample (0 = all of them)"
+        default: "20"
+      budget:
+        description: "USD cap per golden task"
+        default: "0.5"
 
 concurrency:
   group: evals
-  cancel-in-progress: false   # a nightly must never cancel the run whose baseline the next one diffs
+  cancel-in-progress: false   # never cancel the run whose report the next one diffs against
+
+permissions:
+  contents: read
+  actions: read   # read the last green run's report: the baseline and the fingerprint
 
 jobs:
   golden:
@@ -37,12 +49,26 @@ jobs:
     env:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      GH_TOKEN: ${{ github.token }}
       PRISMOID_CLI_API_URL: http://localhost:8100
       # The browser rows (golden and the web suite) run only when an operator hosts the
       # fixture admin app somewhere a task's frame can reach, and then need computer use on.
       PRISMOID_EVALS_BROWSER_URL: ${{ vars.PRISMOID_EVALS_BROWSER_URL }}
       PRISMOID_COMPUTER_USE_ENABLED: ${{ vars.PRISMOID_EVALS_BROWSER_URL != '' }}
+      CASES: ${{ github.event.inputs.cases || '20' }}
+      BUDGET: ${{ github.event.inputs.budget || '0.5' }}
     steps:
+      # Without the producer's key every case fails in seconds (0/100, "no artifact"); say why instead.
+      - name: Check the model key
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error::ANTHROPIC_API_KEY is not set: every case would fail without a model. Add the repository secret."
+            exit 1
+          fi
+          [[ "$CASES" =~ ^[0-9]+$ ]] || { echo "::error::cases must be a whole number, got '$CASES'"; exit 1; }
+          [[ "$BUDGET" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "::error::budget must be a number, got '$BUDGET'"; exit 1; }
+        working-directory: .
+
       - uses: actions/checkout@v7
 
       - name: Install uv
@@ -50,28 +76,62 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install deps
+        run: uv sync --frozen
+
+      - name: Fingerprint what the evals measure
+        run: |
+          {
+            echo "prompts=$(uv run python -c 'from tools.prompt_evidence import prompts_sha; print(prompts_sha())')"
+            echo "skills=$(find skills -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -c1-16)"
+            echo "files=$(sha256sum prismoid/runner/default_models.yaml evals/cases/golden.jsonl \
+              evals/datasets/trivial50.jsonl uv.lock ../.github/workflows/evals.yml | sha256sum | cut -c1-16)"
+          } > fingerprint.txt
+          cat fingerprint.txt
+
+      - name: Fetch the last green run's report
+        run: |
+          mkdir -p previous
+          last=$(gh run list --workflow evals.yml --branch "$GITHUB_REF_NAME" --status success --limit 1 \
+            --json databaseId -q '.[0].databaseId // empty')
+          if [ -n "$last" ]; then
+            gh run download "$last" -n golden-report -D previous || echo "run $last kept no report"
+          fi
+          ls previous
+
+      - name: Skip when nothing changed
+        id: decide
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "schedule" ] && [ -f previous/fingerprint.txt ] \
+            && cmp -s previous/fingerprint.txt fingerprint.txt; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "## Evals skipped: nothing they measure changed since the last green run" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Bring up the stack (postgres + minio, the same compose as local)
+        if: steps.decide.outputs.skip != 'true'
         run: |
           docker compose -f deploy/compose.yaml up -d --wait
           docker compose -f deploy/compose.yaml run --rm minio-init
 
-      - name: Install deps
-        run: uv sync --frozen
-
       # uvx --from rust-just: the runner image ships no `just` binary; rust-just runs it without PATH ceremony.
       - name: Migrate + seed the catalog
+        if: steps.decide.outputs.skip != 'true'
         run: |
           uvx --from rust-just just migrate
           uv run prismoid models seed
 
       - name: Add a frontier judge of a second family (if the key is present)
-        if: ${{ env.OPENAI_API_KEY != '' }}
+        if: steps.decide.outputs.skip != 'true' && env.OPENAI_API_KEY != ''
         run: |
           uv run prismoid models add openai:gpt-5 --classes judge \
             --price input_token=1.25/M --price output_token=10/M --enable
 
       # The worker first: its first start creates the durable engine's database, which the API needs to boot.
       - name: Start the worker and API
+        if: steps.decide.outputs.skip != 'true'
         run: |
           .venv/bin/prismoid run worker > worker.log 2>&1 &  echo $! > worker.pid
           for _ in $(seq 1 90); do if grep -q "worker ready" worker.log; then break; fi; sleep 2; done
@@ -83,80 +143,80 @@ jobs:
 
       # Signup is a call to the API, so it comes after the API is up.
       - name: Create a user + token (the eval harness reads ~/.prismoid/credentials)
+        if: steps.decide.outputs.skip != 'true'
         run: |
           uv run prismoid login --signup --email ci@example.com --name CI \
             --password "${{ secrets.CI_USER_PASSWORD || 'correct horse battery staple' }}"
 
-      - name: The trivial50 talk set (a report, never a gate; the problem books' rows are dataset rows)
+      - name: The trivial50 talk set, a seeded sample (a report, never a gate)
+        if: steps.decide.outputs.skip != 'true'
         continue-on-error: true
-        run: uv run python -m evals.run --suite trivial50 | tee trivial50.txt
+        run: uv run python -m evals.run --suite trivial50 --sample 15 --seed 1 | tee trivial50.txt
 
-      - name: The selection lanes (advisory drift alarms — runners existed, cadence did not)
+      - name: The selection lanes (advisory drift alarms)
+        if: steps.decide.outputs.skip != 'true'
         continue-on-error: true
         run: |
           uv run python -m evals.run --suite bot-selection  | tee bot-selection.txt
-          uv run python -m evals.run --suite skill-golden --limit 20 | tee skill-golden.txt
-          uv run python -m evals.run --suite bot-golden   --limit 20 | tee bot-golden.txt
+          uv run python -m evals.run --suite skill-golden --limit 20 --budget "$BUDGET" | tee skill-golden.txt
+          uv run python -m evals.run --suite bot-golden   --limit 20 --budget "$BUDGET" | tee bot-golden.txt
 
       - name: Run the golden suite
+        if: steps.decide.outputs.skip != 'true'
         run: |
-          uv run python -m evals.run --suite golden \
-            --limit "${{ github.event.inputs.limit || 100 }}" \
+          sample=()
+          if [ "$CASES" != "0" ]; then sample=(--sample "$CASES" --seed 1); fi
+          uv run python -m evals.run --suite golden "${sample[@]}" --budget "$BUDGET" \
             --concurrency 6 --report report.json | tee run.txt
 
       # The web suite drives the fixture admin app, so it rides that variable. It runs after the
       # required golden step with its own timeout, so it can never starve the job's budget.
       - name: The web suite (ADVISORY; runs only with the fixture site)
-        if: ${{ vars.PRISMOID_EVALS_BROWSER_URL != '' }}
+        if: steps.decide.outputs.skip != 'true' && vars.PRISMOID_EVALS_BROWSER_URL != ''
         timeout-minutes: 45
         continue-on-error: true
         run: uv run python -m evals.suites.web | tee web.txt
 
-      - name: Restore the previous run's baseline
-        uses: actions/cache/restore@v6
-        with:
-          path: backend/baseline.json   # action paths resolve from the workspace root, not the step cwd
-          # The save key appends `-${{ github.run_id }}`, so the exact key NEVER matches on the
-          # next run — the diff silently no-op'd for every nightly. `restore-keys` prefix-matches
-          # the newest prior save, which is the baseline this run is meant to diff against.
-          key: evals-baseline-${{ github.ref_name }}
-          restore-keys: |
-            evals-baseline-${{ github.ref_name }}-
-
       - name: Run-over-run diff → job summary
-        if: always()
+        if: always() && steps.decide.outputs.skip == 'false'
         run: |
           {
             echo '## Golden evals'
             echo '```'
             tail -n 6 run.txt || true
             echo '```'
-            echo '### Diff vs the previous nightly'
+            echo '### Diff vs the last green run'
             echo '```'
-            uv run python tools/evals_diff.py baseline.json report.json || true
+            if [ -f previous/report.json ]; then
+              uv run python tools/evals_diff.py previous/report.json report.json || true
+            else
+              echo "no earlier report to diff against"
+            fi
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Promote this run to the baseline
-        if: success()
-        run: cp report.json baseline.json
-
-      - name: Save the new baseline
-        if: success()
-        uses: actions/cache/save@v6
-        with:
-          path: backend/baseline.json
-          key: evals-baseline-${{ github.ref_name }}-${{ github.run_id }}
-
-      - name: Keep the report as an artifact
-        if: always()
+      # A green run's report is the next run's baseline and carries its fingerprint; a skipped run hands
+      # the last green report forward, so the chain never breaks.
+      - name: Keep this run's report
+        if: always() && steps.decide.outputs.skip == 'false'
         uses: actions/upload-artifact@v7
         with:
           name: golden-report
-          path: backend/report.json
+          path: |
+            backend/report.json
+            backend/fingerprint.txt
+          retention-days: 90
+
+      - name: Hand the last green report forward
+        if: steps.decide.outputs.skip == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: golden-report
+          path: backend/previous/
+          retention-days: 90
 
       - name: Stop the stack
-        if: always()
+        if: always() && steps.decide.outputs.skip == 'false'
         run: |
           kill "$(cat worker.pid)" "$(cat api.pid)" 2>/dev/null || true
           docker compose -f deploy/compose.yaml down -v

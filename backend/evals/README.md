@@ -13,7 +13,7 @@ an agent or a model change is judged by numbers, not by one run that looked righ
 | `trace.py` | `PrismoidTrace`: one turn reduced to the facts every evaluator reads. |
 | `metrics.py`, `report.py` | The numbers a report quotes, and the one renderer (`python -m evals.report RUN.json`). |
 | `datasets/` | The public rows, one JSONL file per set (see its README). Data only. |
-| `cases/` | Case lists that live in code: the golden hundred, the per-bot and per-skill golden lanes, the Lead's parity book. |
+| `cases/` | The golden hundred (`golden.jsonl`, data; `golden.py` loads it), the per-bot and per-skill golden lanes, the Lead's parity book. |
 | `suites/` | One capability's rows scored on what the person got: routing, bot selection, research, documents, web. |
 | `runners/` | One row in, one `PrismoidTrace` out: `live` (a real task), `conversation` (a bot chat), `decide` (one agent in process), `plain_loop` (the comparison row); `summary` writes the report. |
 | `evaluators/` | Scoring: the outcome verdict, the row's checks, its budget, the four golden scores. |
@@ -50,7 +50,7 @@ A live run submits real tasks to a running API and worker (or, for `decide`, `pl
 (`uv run prismoid login`); the harness reads the stored token.
 
 ```bash
-uv run python -m evals.run --suite golden --limit 20 --report report.json
+uv run python -m evals.run --suite golden --sample 20 --seed 1 --budget 0.5 --report report.json
 uv run python -m evals.run --suite trivial50          # a dataset suite; see --dry-run for the list
 uv run python -m evals.run --suite outcomes --trials 3 --baseline old.json --gate
 uv run python -m evals.run --suite routing            # also: bot-selection, bot-golden, skill-golden
@@ -72,8 +72,12 @@ runs scored and names the baseline rows this run skipped. `--gate` refuses a sel
 selection as its baseline: a few rows cannot vouch for a suite.
 
 Dataset suites write `evals/reports/<suite>-<tree>.json`; `--baseline` compares with an earlier
-report and `--gate` exits 1 unless the gate passes. Every suite takes a budget per task (`--budget`).
-The nightly workflow (`.github/workflows/evals.yml`) runs the same commands. Inside this project,
+report and `--gate` exits 1 unless the gate passes. Every suite takes a budget per task (`--budget`:
+a dataset suite's default is 1 USD; golden sends none unless given, so the deployment's default applies).
+`--sample N --seed S` also draws a seeded sample of the golden cases.
+The weekly workflow (`.github/workflows/evals.yml`) runs the same commands on a sample, and skips when
+nothing the evals measure changed since its last green run; a pull request that changes `prismoid/ai` or
+`skills` decides a sample of 50 outcome rows in process (`.github/workflows/evals-pr.yml`). Inside this project,
 live runs go through the eval seat only, with the owner's go.
 
 ## Adding a case
@@ -83,7 +87,9 @@ live runs go through the eval seat only, with the owner's go.
   `expected_outcome` and `allowed_outcomes`, limits (`max_tool_calls`, `budget`, ...), `checks`,
   and where it came from (`source`, `label_note`). A field outside the schema fails to load. Run
   the offline commands above; the dry run must count your row.
-- A golden case: add a `Golden` to `CASES` in `cases/golden.py`.
+- A golden case: append one JSON line to `cases/golden.jsonl` (`name`, `category`, `goal`, `inputs`,
+  `must_contain`, and optionally `skill`, `bots`, `note`; `cases/golden.py` names the categories). A
+  browser row names the fixture site as `{base}`.
 - A bot's or a skill's golden case ships with the bot or skill (`golden:` in its manifest), not here.
 
 ## Adding a suite

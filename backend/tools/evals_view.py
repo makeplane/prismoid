@@ -11,8 +11,8 @@ Standard library only; binds 127.0.0.1; never writes a file. Every request re-re
 edited dataset or a new report shows up on the next refresh (the page also refreshes on focus).
 
 The numbers (accuracy, strata, confusion, broke/fixed against a baseline) are never recomputed here:
-the Numbers button runs `python -m evals.report` through `uv run --frozen`, and the golden tab imports
-`evals.cases.golden` the same way. Dataset and report text is rendered with textContent only: rows hold
+the Numbers button runs `python -m evals.report` through `uv run --frozen`. The golden tab reads
+`evals/cases/golden.jsonl`. Dataset and report text is rendered with textContent only: rows hold
 adversarial asks by design.
 """
 
@@ -29,12 +29,6 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
-
-GOLDEN_DUMP = (
-    "import dataclasses, json\n"
-    "from evals.cases.golden import CASES\n"
-    "print(json.dumps([dataclasses.asdict(c) for c in CASES]))\n"
-)
 
 
 def find_repo(start: Path) -> Path:
@@ -147,10 +141,9 @@ class Viewer:
         return out
 
     def golden(self) -> dict:
-        got = self._uv("-c", GOLDEN_DUMP)
-        if got["ok"]:
-            got["cases"] = json.loads(got.pop("stdout"))
-        return got
+        path = self.backend / "evals" / "cases" / "golden.jsonl"
+        cases = [json.loads(ln) for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+        return {"ok": True, "cases": cases}
 
 
 def make_handler(viewer: Viewer) -> type[BaseHTTPRequestHandler]:
@@ -514,33 +507,27 @@ async function renderReports(view){
 
 // ── golden ─────────────────────────────────────────────────────────────────────
 async function renderGolden(view){
-  if (!S.golden){
-    view.replaceChildren(el("div", {class:"empty"},
-      el("div", {text:"The golden cases live in code (evals/cases/golden.py), so reading them means importing that module."}),
-      el("button", {class:"b", style:"margin-top:10px", text:"Load golden cases (uv run)", onclick: async e => {
-        e.target.disabled = true; e.target.textContent = "importing…";
-        try { S.golden = await api("/api/golden"); } catch (err){ S.golden = {ok:false, stderr:String(err)}; }
-        render(); }})));
-    return;
-  }
+  if (!S.golden){ try { S.golden = await api("/api/golden"); } catch (err){ S.golden = {ok:false, stderr:String(err)}; } }
   if (!S.golden.ok){ view.replaceChildren(el("pre", {class:"err", text:(S.golden.cmd || "") + "\n\n" + (S.golden.stderr || "failed")}), el("button", {class:"b", style:"margin-top:8px", text:"Retry", onclick:() => { S.golden = null; render(); }})); return; }
   const cases = S.golden.cases, f = S.f, q = (f.q || "").toLowerCase();
-  const shown = cases.filter(c => (!q || (c.name + " " + c.goal).toLowerCase().includes(q)) && (!f.skill || c.skill === f.skill));
+  const shown = cases.filter(c => (!q || [c.name, c.goal, c.note].some(x => (x || "").toLowerCase().includes(q))) && (!f.skill || c.skill === f.skill) && (!f.cat || c.category === f.cat));
   const bar = el("div", {class:"bar"},
-    el("input", {type:"search", placeholder:"search name or goal…", value:f.q || "", oninput:e => { S.f.q = e.target.value; clearTimeout(S.t); S.t = setTimeout(render, 150); }}),
+    el("input", {type:"search", placeholder:"search name, goal or note…", value:f.q || "", oninput:e => { S.f.q = e.target.value; clearTimeout(S.t); S.t = setTimeout(render, 150); }}),
+    sel("category", uniq(cases.map(c => c.category)), f.cat, v => { S.f.cat = v; render(); }),
     sel("skill", uniq(cases.map(c => c.skill)), f.skill, v => { S.f.skill = v; render(); }),
     el("button", {class:"b", text:"Reload", onclick:() => { S.golden = null; render(); }}),
     el("span", {class:"count", text:`${shown.length} of ${cases.length} cases`}));
   const cols = [
     {key:"name", label:"name", cls:"id", cell:c => c.name},
     {key:"goal", label:"goal", cls:"msg", cell:c => trunc(c.goal, 200)},
+    {key:"category", label:"category", cell:c => pill(c.category)},
     {key:"skill", label:"skill", cell:c => c.skill ? pill(c.skill) : ""},
     {key:"inputs", label:"inputs", cls:"mono", sortv:c => (c.inputs || []).join(), cell:c => (c.inputs || []).map(p => p.split("/").pop()).join(", ")},
     {key:"must", label:"must contain", sortv:c => (c.must_contain || []).length, cell:c => (c.must_contain || []).map(t => pill(t, "mut"))},
   ];
   view.replaceChildren(bar, table(cols, shown, c => {
     S.open = c.name; const d = $("#detail"); d.replaceChildren(el("button", {class:"b close", text:"✕", onclick:closeDetail}), el("h2", {text:c.name}),
-      el("h3", {text:"goal"}), el("pre", {class:"msgfull", text:c.goal}), el("h3", {text:"raw case"}), el("pre", {text:JSON.stringify(c, null, 2)}));
+      el("h3", {text:"goal"}), el("pre", {class:"msgfull", text:c.goal}), c.note ? el("h3", {text:"note"}) : "", c.note ? el("div", {text:c.note}) : "", el("h3", {text:"raw case"}), el("pre", {text:JSON.stringify(c, null, 2)}));
     d.classList.add("open"); render();
   }, c => S.open === c.name));
 }

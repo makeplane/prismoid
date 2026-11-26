@@ -72,6 +72,61 @@ async def test_a_receipt_that_never_comes_is_said_so_within_the_cases_clock(
     assert result.verdict == "no receipt" and not result.ok
 
 
+@pytest.mark.parametrize(("budget", "sent"), [(0.5, {"usd": 0.5}), (None, None)])
+async def test_a_golden_task_carries_a_budget_only_when_one_is_given(
+    quick: None, budget: float | None, sent: dict[str, float] | None
+) -> None:
+    posted: list[dict[str, object]] = []
+    api = _api([httpx.Response(200, json={"verdict": "pass", "verifier_family": "gpt"})])
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and request.url.path == "/v1/tasks":
+            posted.append(json.loads(request.content))
+        return api.handle_request(request)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(answer), base_url="http://api") as client:
+        await harness.run_case(client, Golden(name="memo", goal="Write the memo", inputs=()), budget)
+    assert posted[0].get("budget") == sent
+
+
+async def test_a_task_parked_on_its_budget_is_cancelled_and_said_so(quick: None) -> None:
+    calls: list[str] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        calls.append(f"{request.method} {request.url.path}")
+        if request.method == "POST" and request.url.path == "/v1/tasks":
+            return httpx.Response(202, json={"task_id": TASK})
+        if request.url.path == f"/v1/tasks/{TASK}":
+            return httpx.Response(200, json={"status": "waiting", "budget": {"usd": "0.50"}})
+        if request.url.path == "/v1/gates":
+            return httpx.Response(200, json=[{"task_id": TASK, "kind": "budget"}])
+        return httpx.Response(200, json={"status": "cancelled"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(answer), base_url="http://api") as client:
+        result = await harness.run_case(client, Golden(name="memo", goal="Write the memo", inputs=()), 0.5)
+    assert (result.verdict, result.note, result.ok) == ("over budget", harness.BUDGET_NOTE, False)
+    assert f"POST /v1/tasks/{TASK}/cancel" in calls
+
+
+async def test_a_task_waiting_on_a_question_is_not_taken_for_over_budget(
+    quick: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(harness, "TIMEOUT_S", 0.05)
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and request.url.path == "/v1/tasks":
+            return httpx.Response(202, json={"task_id": TASK})
+        if request.url.path == f"/v1/tasks/{TASK}":
+            return httpx.Response(200, json={"status": "waiting", "budget": {}})
+        if request.url.path == "/v1/gates":
+            return httpx.Response(200, json=[{"task_id": TASK, "kind": "input"}])
+        return httpx.Response(404, json={})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(answer), base_url="http://api") as client:
+        result = await harness.run_case(client, Golden(name="memo", goal="Write the memo", inputs=()))
+    assert result.verdict == "timeout"
+
+
 def test_a_term_in_the_render_sidecar_counts_for_a_binary_deliverable() -> None:
     sheet = '{"kind":"sheet","sheets":[{"rows":[["Revenue",41.6]]}]}'
     assert harness.missing_terms(("41.6", "22.9"), "PK\x03\x04", sheet) == ("22.9",)

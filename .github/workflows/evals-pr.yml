@@ -1,0 +1,87 @@
+# Routing evals on a pull request that changes what the agents read or do.
+#
+# A seeded sample of 50 outcome rows, each decided by ONE in-process Lead call (`--suite decide`): no task,
+# no plan, no Machine, no verifier, so it is the cheapest wide signal the evals have. Advisory: a sample
+# never gates (the whole suite answers to `--gate`), so the report lands in the job summary for the
+# reviewer. A pull request from a fork gets no secrets; the job then says so and runs nothing.
+
+name: PR routing evals
+
+on:
+  pull_request:
+    paths:
+      - "backend/prismoid/ai/**"
+      - "backend/skills/**"
+      - ".github/workflows/evals-pr.yml"
+
+concurrency:
+  group: evals-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true   # a newer push makes the older sample worthless; stop paying for it
+
+permissions:
+  contents: read
+
+jobs:
+  decide:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: backend   # the service dir (ADR-007)
+        shell: bash
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - name: Check the model key
+        id: key
+        working-directory: .
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "has=false" >> "$GITHUB_OUTPUT"
+            echo "## Routing evals not run: no ANTHROPIC_API_KEY (a fork's pull request gets no secrets)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "has=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v7
+        if: steps.key.outputs.has == 'true'
+
+      - name: Install uv
+        if: steps.key.outputs.has == 'true'
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+
+      # The decision reads the model catalog from Postgres, so the database comes up; no API, no worker.
+      - name: Bring up the stack (postgres + minio, the same compose as local)
+        if: steps.key.outputs.has == 'true'
+        run: |
+          docker compose -f deploy/compose.yaml up -d --wait
+          docker compose -f deploy/compose.yaml run --rm minio-init
+
+      - name: Install deps
+        if: steps.key.outputs.has == 'true'
+        run: uv sync --frozen
+
+      # uvx --from rust-just: the runner image ships no `just` binary; rust-just runs it without PATH ceremony.
+      - name: Migrate + seed the catalog
+        if: steps.key.outputs.has == 'true'
+        run: |
+          uvx --from rust-just just migrate
+          uv run prismoid models seed
+
+      - name: Decide a seeded sample of the outcome rows
+        if: steps.key.outputs.has == 'true'
+        run: uv run python -m evals.run --suite decide --sample 50 --seed 1 | tee decide.txt
+
+      - name: Report → job summary
+        if: always() && steps.key.outputs.has == 'true'
+        run: |
+          {
+            echo '## Routing evals (50 sampled outcome rows, one Lead call each; advisory)'
+            cat decide.txt 2>/dev/null || echo "the run produced no report"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Stop the stack
+        if: always() && steps.key.outputs.has == 'true'
+        run: docker compose -f deploy/compose.yaml down -v
