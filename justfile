@@ -242,6 +242,10 @@ searxng:
 evals *ARGS:
     uv run python -m evals.run {{ARGS}}
 
+# browse the eval datasets, saved reports and golden cases in a local page (127.0.0.1, read-only)
+evals-view *ARGS:
+    python3 tools/evals_view.py {{ARGS}}
+
 # §15 performance budgets, warm p95 against the running API. Needs the API up + a login.
 perf:
     uv run pytest tests/perf -m perf -s -p no:cacheprovider

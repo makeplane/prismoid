@@ -36,6 +36,9 @@ uv run python -m evals.cases.lead_parity              # the Lead's parity book, 
 uv run pytest tests/unit/evals tests/laws -q          # the eval code's own tests and the dataset laws
 ```
 
+`just evals-view` (`tools/evals_view.py`) opens a local, read-only page over the datasets, the saved
+reports (a run against a baseline, its numbers from `evals.report`) and the golden cases.
+
 `tests/laws/test_law_no_dataset_phrases_in_prompts.py` fails when a prompt or tool description
 repeats a phrase from a dataset ask. Fix the prompt by stating the rule in its own words; never edit
 a row to make it pass.
