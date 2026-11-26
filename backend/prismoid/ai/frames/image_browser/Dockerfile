@@ -11,7 +11,7 @@ USER root
 # is the reminder that the bump (to bookworm-security's current build) is overdue. Fonts so pages
 # render as their authors meant.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends chromium=156.0.8078.79-1~deb12u1 \
+ && apt-get install -y --no-install-recommends chromium=156.0.8078.108-1~deb12u1 \
       fonts-liberation fonts-noto-color-emoji \
  && rm -rf /var/lib/apt/lists/*
 
