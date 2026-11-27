@@ -67,6 +67,13 @@ jobs:
           fi
           [[ "$CASES" =~ ^[0-9]+$ ]] || { echo "::error::cases must be a whole number, got '$CASES'"; exit 1; }
           [[ "$BUDGET" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "::error::budget must be a number, got '$BUDGET'"; exit 1; }
+          # Listing models is free; a key the provider refuses fails here, with its reason, not as 0/N.
+          code=$(curl -s -o models.json -w '%{http_code}' https://api.anthropic.com/v1/models \
+            -H "x-api-key: $ANTHROPIC_API_KEY" -H "anthropic-version: 2023-06-01")
+          if [ "$code" != "200" ]; then
+            echo "::error::Anthropic refused ANTHROPIC_API_KEY (HTTP $code): $(jq -r '.error.message // empty' models.json)"
+            exit 1
+          fi
         working-directory: .
 
       - uses: actions/checkout@v7
@@ -176,6 +183,11 @@ jobs:
         timeout-minutes: 45
         continue-on-error: true
         run: uv run python -m evals.suites.web | tee web.txt
+
+      # The harness says a case failed; the worker says why.
+      - name: Show the worker's errors (when a case failed)
+        if: failure() && steps.decide.outputs.skip == 'false'
+        run: grep -iE "error|exception|traceback" worker.log | tail -n 80 || echo "worker.log holds no errors"
 
       - name: Run-over-run diff → job summary
         if: always() && steps.decide.outputs.skip == 'false'
