@@ -127,6 +127,29 @@ async def test_a_task_waiting_on_a_question_is_not_taken_for_over_budget(
     assert result.verdict == "timeout"
 
 
+async def test_a_case_that_delivered_nothing_says_why(quick: None) -> None:
+    diagnosis = {
+        "what_failed": "lead produced no result",
+        "why": "the model refused the request",
+        "attempts": 3,
+    }
+    frames = [{"type": "step.state", "attempt": 3}, {"type": "escalation.raised", "diagnosis": diagnosis}]
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and request.url.path == "/v1/tasks":
+            return httpx.Response(202, json={"task_id": TASK})
+        if request.url.path == f"/v1/tasks/{TASK}":
+            return httpx.Response(200, json={"status": "failed", "budget": {}})
+        if request.url.path == f"/v1/tasks/{TASK}/events":
+            return httpx.Response(200, text="".join(f"data: {json.dumps(f)}\n\n" for f in frames))
+        return httpx.Response(404, json={})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(answer), base_url="http://api") as client:
+        result = await harness.run_case(client, Golden(name="memo", goal="Write the memo", inputs=()))
+    assert (result.verdict, result.attempts) == ("no artifact", 3)
+    assert result.note == "lead produced no result: the model refused the request"
+
+
 def test_a_term_in_the_render_sidecar_counts_for_a_binary_deliverable() -> None:
     sheet = '{"kind":"sheet","sheets":[{"rows":[["Revenue",41.6]]}]}'
     assert harness.missing_terms(("41.6", "22.9"), "PK\x03\x04", sheet) == ("22.9",)

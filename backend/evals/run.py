@@ -183,6 +183,16 @@ async def over_budget(client: httpx.AsyncClient, task_id: str) -> bool:
     return any(g["task_id"] == task_id and g["kind"] == "budget" for g in gates)
 
 
+def why_stopped(events: list[str]) -> str:
+    """The last escalation's diagnosis (what failed: why), so a case that delivered nothing says why."""
+    said = ""
+    for line in events:
+        if '"escalation.raised"' in line:
+            diagnosis = json.loads(line.removeprefix("data: ")).get("diagnosis") or {}
+            said = ": ".join(p for p in (diagnosis.get("what_failed"), diagnosis.get("why")) if p)
+    return said
+
+
 async def run_case(client: httpx.AsyncClient, case: Golden, budget_usd: float | None = None) -> Result:
     """One golden case as a real task; `budget_usd` caps it, else the deployment's default budget does."""
     started = time.monotonic()
@@ -221,7 +231,9 @@ async def run_case(client: httpx.AsyncClient, case: Golden, budget_usd: float | 
             if '"artifact.produced"' in line
         ]
         if not artifacts:
-            return Result(case.name, "no artifact", attempts, time.monotonic() - started)
+            return Result(
+                case.name, "no artifact", attempts, time.monotonic() - started, note=why_stopped(events)
+            )
 
         report = await receipt(client, artifacts[-1], until=started + TIMEOUT_S)
         if report is None:
