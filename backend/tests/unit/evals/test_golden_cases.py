@@ -69,12 +69,14 @@ ROW: dict[str, object] = {
     "goal": "Write the memo.",
     "inputs": [],
     "must_contain": ["41.6"],
+    "deliverable": "document",
 }
 BROWSER_ROW: dict[str, object] = {
     **ROW,
     "name": "site",
     "category": "browser",
     "goal": "Open {base}/index.html",
+    "deliverable": None,
 }
 
 
@@ -91,6 +93,22 @@ def test_a_field_outside_the_schema_fails_to_load(tmp_path: Path) -> None:
 def test_a_case_states_its_inputs_rather_than_defaulting_to_a_brief(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="inputs"):
         load_cases(_write(tmp_path, {k: v for k, v in ROW.items() if k != "inputs"}))
+
+
+def test_a_case_states_its_deliverable_even_when_the_lead_decides(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="deliverable"):
+        load_cases(_write(tmp_path, {k: v for k, v in ROW.items() if k != "deliverable"}))
+    with pytest.raises(ValueError, match="deliverable"):
+        load_cases(_write(tmp_path, {**ROW, "deliverable": "webapp"}))
+
+
+def test_every_case_asks_for_the_file_it_scores() -> None:
+    """Without the dial the Lead answers a short ask in a reply, which publishes nothing to verify, so
+    every case names a file, and a labelled skill's case names that skill's kind of file."""
+    assert [c.name for c in CASES if not c.deliverable] == []
+    kinds = {"model": "spreadsheet", "code": "code", "deck": "deck", "organize": "collection"}
+    wrong = [c.name for c in CASES if c.deliverable != kinds.get(c.skill, "document")]
+    assert wrong == []
 
 
 def test_a_browser_row_comes_only_with_a_site_and_names_it(tmp_path: Path) -> None:

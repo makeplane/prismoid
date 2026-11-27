@@ -89,6 +89,22 @@ async def test_a_golden_task_carries_a_budget_only_when_one_is_given(
     assert posted[0].get("budget") == sent
 
 
+@pytest.mark.parametrize("deliverable", ["spreadsheet", ""])
+async def test_a_golden_task_carries_its_cases_deliverable_dial(quick: None, deliverable: str) -> None:
+    posted: list[dict[str, object]] = []
+    api = _api([httpx.Response(200, json={"verdict": "pass", "verifier_family": "gpt"})])
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and request.url.path == "/v1/tasks":
+            posted.append(json.loads(request.content))
+        return api.handle_request(request)
+
+    case = Golden(name="model", goal="Build the model", inputs=(), deliverable=deliverable)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(answer), base_url="http://api") as client:
+        await harness.run_case(client, case)
+    assert posted[0].get("deliverable") == (deliverable or None)
+
+
 async def test_a_task_parked_on_its_budget_is_cancelled_and_said_so(quick: None) -> None:
     calls: list[str] = []
 

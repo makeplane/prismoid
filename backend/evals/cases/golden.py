@@ -5,14 +5,20 @@
 """The golden hundred - real tasks, scored on the **verified** verdict.
 
 The cases are data, one JSON line each in `golden.jsonl` beside this file: `name`, `category`, `goal`,
-`inputs`, `must_contain`, and optionally `skill`, `bots` and `note` (why the case is the way it is). A
-field outside that set fails to load. This module loads them and holds the rules a case list must keep.
+`inputs`, `must_contain`, `deliverable`, and optionally `skill`, `bots` and `note` (why the case is the way
+it is). A field outside that set fails to load. This module loads them and holds the rules a case list must
+keep.
+
+`deliverable` is the task's deliverable dial (ADR-092: a code-made recipe, `route_source=dial`), and it is a
+lever: without it the Lead answers a short ask in a reply, and a reply publishes nothing to verify. Golden
+scores the work and its receipt; whether the Lead would have chosen a file is the decide suite's question.
+Every row states it; `null` (the browser rows) leaves the turn to the Lead.
 
 The categories:
 
 * `single-brief` - the first twenty: document analysis over one brief.
 * `breadth` - the same discipline turned on the skills (the `skill` label is what each case is written to
-  exercise; routing still decides from the goal). Atlas answers most; Helios, a contrasting brief, is what
+  exercise; the case's `deliverable` names the kind of file, never the skill). Atlas answers most; Helios, a contrasting brief, is what
   makes a *comparison* real; code and spec cases are self-contained (no source), because a coding task's
   brief is its own prompt. What each skill's cases ask for:
   - analyze: reason over the figures, not just restate them.
@@ -60,6 +66,7 @@ import random
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -67,6 +74,9 @@ ATLAS = "tests/fixtures/atlas-q3.md"
 HELIOS = "tests/fixtures/helios-q3.md"  # a contrasting brief - lets a case genuinely *compare*
 CASES_FILE = Path(__file__).with_name("golden.jsonl")
 BASE = "{base}"  # how a browser row names the fixture site
+
+# The task door's deliverable dial (api/serializers/tasks.TaskIn.deliverable).
+Deliverable = Literal["document", "collection", "spreadsheet", "deck", "code"]
 
 
 @dataclass(frozen=True)
@@ -90,6 +100,10 @@ class Golden:
     # `skill` this IS a lever (it narrows the roster), and honestly so: the case measures the
     # bot's work, and One's routing to it is measured by the selection suite, not this one.
     bots: tuple[str, ...] = ()
+
+    # The deliverable dial the task is sent with: the kind of file the case scores. Empty = no dial, the
+    # Lead decides (the skill and bot lanes' cases, and the browser rows).
+    deliverable: str = ""
 
     category: str = ""  # a golden.jsonl case's category; empty on the skill and bot lanes' cases
     note: str = ""  # why the case is the way it is
@@ -115,6 +129,7 @@ class GoldenRow(BaseModel):
     goal: str
     inputs: tuple[str, ...]
     must_contain: tuple[str, ...]
+    deliverable: Deliverable | None  # stated on every row; null = the Lead decides
     skill: str = ""
     bots: tuple[str, ...] = ()
     note: str = ""
@@ -125,6 +140,7 @@ class GoldenRow(BaseModel):
             goal=self.goal.replace(BASE, base),
             inputs=self.inputs,
             must_contain=self.must_contain,
+            deliverable=self.deliverable or "",
             skill=self.skill,
             bots=self.bots,
             category=self.category.value,

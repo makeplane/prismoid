@@ -203,6 +203,8 @@ async def run_case(client: httpx.AsyncClient, case: Golden, budget_usd: float | 
             payload["budget"] = {"usd": budget_usd}
         if case.bots:
             payload["bots"] = list(case.bots)  # the bot-golden lane pins its subject
+        if case.deliverable:
+            payload["deliverable"] = case.deliverable  # a file to verify, not a reply
         accepted = await client.post("/v1/tasks", json=payload)
         accepted.raise_for_status()
         task_id = accepted.json()["task_id"]
