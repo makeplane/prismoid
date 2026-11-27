@@ -31,6 +31,8 @@ jobs:
         shell: bash
     env:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      # The in-process Lead reads its key under the worker's prefix, not the bare name.
+      PRISMOID_WORKER_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
     steps:
       - name: Check the model key
         id: key

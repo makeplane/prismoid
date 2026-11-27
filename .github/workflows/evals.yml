@@ -49,6 +49,9 @@ jobs:
     env:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      # The worker and the in-process suites read their keys under the worker's prefix, not the bare names.
+      PRISMOID_WORKER_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      PRISMOID_WORKER_OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       GH_TOKEN: ${{ github.token }}
       PRISMOID_CLI_API_URL: http://localhost:8100
       # The browser rows (golden and the web suite) run only when an operator hosts the
@@ -85,22 +88,6 @@ jobs:
 
       - name: Install deps
         run: uv sync --frozen
-
-      # A catalog model the key cannot use fails every step in seconds at no cost ("model not found" is
-      # not billed), and reads as the model failing; name the missing ones instead.
-      - name: Check the key serves the catalog's Anthropic models
-        run: |
-          curl -sf "https://api.anthropic.com/v1/models?limit=1000" \
-            -H "x-api-key: $ANTHROPIC_API_KEY" -H "anthropic-version: 2023-06-01" > models.json
-          uv run python - <<'EOF'
-          import json, yaml
-          served = {m["id"] for m in json.load(open("models.json"))["data"]}
-          rows = yaml.safe_load(open("prismoid/runner/default_models.yaml"))["models"]
-          wanted = {r["model_id"] for r in rows if r["provider"] == "anthropic" and r.get("enabled")}
-          print("the key serves:", ", ".join(sorted(served)))
-          if missing := sorted(wanted - served):
-              raise SystemExit(f"::error::the key cannot use these catalog models: {', '.join(missing)}")
-          EOF
 
       - name: Fingerprint what the evals measure
         run: |

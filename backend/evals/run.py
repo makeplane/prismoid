@@ -65,6 +65,7 @@ TIMEOUT_S = 900.0
 POLL_S = 4.0
 DATASET_BUDGET_USD = 1.0  # a dataset suite's task cap when `--budget` is not given
 BUDGET_NOTE = "the task reached its budget and was cancelled"
+REPLY_NOTE = "answered in a reply; nothing was published to verify"
 
 
 @dataclass
@@ -231,9 +232,10 @@ async def run_case(client: httpx.AsyncClient, case: Golden, budget_usd: float | 
             if '"artifact.produced"' in line
         ]
         if not artifacts:
-            return Result(
-                case.name, "no artifact", attempts, time.monotonic() - started, note=why_stopped(events)
-            )
+            # A delivered task with no artifact answered in a reply: nothing was published to verify.
+            replied = REPLY_NOTE if task["status"] == "delivered" else ""
+            note = why_stopped(events) or replied
+            return Result(case.name, "no artifact", attempts, time.monotonic() - started, note=note)
 
         report = await receipt(client, artifacts[-1], until=started + TIMEOUT_S)
         if report is None:
