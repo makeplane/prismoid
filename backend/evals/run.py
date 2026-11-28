@@ -66,6 +66,9 @@ POLL_S = 4.0
 DATASET_BUDGET_USD = 1.0  # a dataset suite's task cap when `--budget` is not given
 BUDGET_NOTE = "the task reached its budget and was cancelled"
 REPLY_NOTE = "answered in a reply; nothing was published to verify"
+# How many more shared cases a golden run may fail than its baseline did: one trial per case flickers,
+# so the gate fails on a drop, never on one case that came up the other way this time.
+GOLDEN_SLACK = 2
 
 
 @dataclass
@@ -192,6 +195,33 @@ def why_stopped(events: list[str]) -> str:
             diagnosis = json.loads(line.removeprefix("data: ")).get("diagnosis") or {}
             said = ": ".join(p for p in (diagnosis.get("what_failed"), diagnosis.get("why")) if p)
     return said
+
+
+def golden_gate(ok: dict[str, bool], baseline: dict[str, bool] | None, floor: float) -> str:
+    """Why a golden run fails its gate, or "" when it passes: below `floor`, or (given the last green
+    run's cases) more than GOLDEN_SLACK more of the cases both runs share failing than failed then."""
+    rate = sum(ok.values()) / len(ok) if ok else 0.0
+    if rate < floor:
+        return f"{rate:.0%} is below the {floor:.0%} floor"
+    shared = sorted(ok.keys() & (baseline or {}).keys())
+    if baseline is None or not shared:
+        return ""
+    before, now = sum(baseline[n] for n in shared), sum(ok[n] for n in shared)
+    if now < before - GOLDEN_SLACK:
+        lost = ", ".join(n for n in shared if baseline[n] and not ok[n])
+        return f"{now} of the {len(shared)} shared cases pass, the baseline passed {before} (now failing: {lost})"
+    return ""
+
+
+def baseline_cases(path: str) -> dict[str, bool] | None:
+    """The cases of an earlier golden `--report`, by name: did each pass."""
+    if not path:
+        return None
+    try:
+        cases = json.loads(pathlib.Path(path).read_text(encoding="utf-8"))["cases"]
+    except (OSError, ValueError, KeyError) as error:
+        raise SystemExit(f"golden: cannot read --baseline {path}: {error}") from error
+    return {name: bool(case.get("ok")) for name, case in cases.items()}
 
 
 async def run_case(client: httpx.AsyncClient, case: Golden, budget_usd: float | None = None) -> Result:
@@ -550,7 +580,12 @@ async def main() -> int:
         "--limit", type=int, default=None, help="how many cases (dataset suites: how many runnable rows)"
     )
     parser.add_argument("--concurrency", type=_at_least_one, default=None, help="cases at a time (4)")
-    parser.add_argument("--threshold", type=float, default=0.90)
+    parser.add_argument(
+        "--threshold",
+        type=float,
+        default=0.90,
+        help="golden: the pass rate a run must reach (with --baseline, a floor)",
+    )
     parser.add_argument("--report", default="", help="Write a JSON report here (for the run-over-run diff).")
     parser.add_argument(
         "--budget",
@@ -572,7 +607,11 @@ async def main() -> int:
     parser.add_argument(
         "--json", action="store_true", help="dataset suites: print the report as JSON, nothing else"
     )
-    parser.add_argument("--baseline", default="", help="dataset suites: an earlier report to compare with")
+    parser.add_argument(
+        "--baseline",
+        default="",
+        help="an earlier report to compare with (golden: its --report; fails on a drop)",
+    )
     parser.add_argument("--gate", action="store_true", help="dataset suites: exit 1 unless the gate passes")
     chooser = parser.add_argument_group("dataset suites: which rows (flags combine with AND)")
     chooser.add_argument("--rows", type=_names, default=(), help="only these row ids: ID[,ID...]")
@@ -651,6 +690,7 @@ async def main() -> int:
         cases = CASES[: args.limit]
         if args.sample is not None:
             cases = golden_cases.sample(cases, args.sample, args.seed or 0)
+    held = baseline_cases(args.baseline)  # read before any spend: a bad path fails here, not after the run
     gate = asyncio.Semaphore(args.concurrency)
 
     print(f"── {args.suite}: {len(cases)} cases, {args.concurrency} at a time ──\n")
@@ -727,10 +767,11 @@ async def main() -> int:
         )
         print(f"\n   report → {args.report}")
 
-    if rate < args.threshold:
-        print(f"\nFAIL: {rate:.0%} is below the {args.threshold:.0%} gate")
+    if why := golden_gate({r.case: r.ok for r in results}, held, args.threshold):
+        print(f"\nFAIL: {why}")
         return 1
-    print(f"\nPASS: {rate:.0%} ≥ {args.threshold:.0%}")
+    against = " and holds against the baseline" if held is not None else ""
+    print(f"\nPASS: {rate:.0%} ≥ {args.threshold:.0%}{against}")
     return 0
 
 

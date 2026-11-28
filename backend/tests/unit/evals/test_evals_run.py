@@ -9,6 +9,7 @@ own `run_case` against a scripted API - no database, no worker."""
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import httpx
 import pytest
@@ -227,3 +228,31 @@ def test_the_replay_stops_exactly_where_the_cli_follow_stops(frame: dict[str, ob
     assert harness.is_terminal(line) is stream.task_stopped(frame)
     assert not harness.is_terminal("event: task.delivered")
     assert not harness.is_terminal(": heartbeat")
+
+
+def test_golden_gates_on_its_floor_alone_without_a_baseline() -> None:
+    run = {"a": True, "b": True, "c": False, "d": False}
+    assert harness.golden_gate(run, None, floor=0.5) == ""
+    assert harness.golden_gate(run, None, floor=0.9) == "50% is below the 90% floor"
+
+
+def test_golden_fails_a_drop_against_its_baseline_but_not_a_flicker() -> None:
+    """One trial per case flickers: a run may lose up to GOLDEN_SLACK of the cases both runs share, and
+    one that loses more names them. Cases only one run has are held by the floor alone."""
+    baseline = {f"c{n}": True for n in range(6)} | {"gone": False}
+    flicker = {f"c{n}": n >= 2 for n in range(6)} | {"new": False}
+    assert harness.GOLDEN_SLACK == 2
+    assert harness.golden_gate(flicker, baseline, floor=0.0) == ""
+    drop = {f"c{n}": n >= 3 for n in range(6)}
+    assert harness.golden_gate(drop, baseline, floor=0.0) == (
+        "3 of the 6 shared cases pass, the baseline passed 6 (now failing: c0, c1, c2)"
+    )
+
+
+def test_a_golden_baseline_is_an_earlier_reports_cases(tmp_path: Path) -> None:
+    report = tmp_path / "report.json"
+    report.write_text(json.dumps({"cases": {"memo": {"ok": True}, "sheet": {"ok": False}}}), encoding="utf-8")
+    assert harness.baseline_cases(str(report)) == {"memo": True, "sheet": False}
+    assert harness.baseline_cases("") is None
+    with pytest.raises(SystemExit, match="cannot read --baseline"):
+        harness.baseline_cases(str(report.with_name("missing.json")))

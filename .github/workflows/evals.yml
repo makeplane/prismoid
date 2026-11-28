@@ -60,6 +60,7 @@ jobs:
       PRISMOID_COMPUTER_USE_ENABLED: ${{ vars.PRISMOID_EVALS_BROWSER_URL != '' }}
       CASES: ${{ github.event.inputs.cases || '20' }}
       BUDGET: ${{ github.event.inputs.budget || '0.5' }}
+      FLOOR: "0.5"   # the golden pass rate no run may fall below: 11/20 (55%) on the first measured run, 2026-11-28
     steps:
       # Without the producer's key every case fails in seconds (0/100, "no artifact"); say why instead.
       - name: Check the model key
@@ -171,13 +172,17 @@ jobs:
           uv run python -m evals.run --suite skill-golden --limit 20 --budget "$BUDGET" | tee skill-golden.txt
           uv run python -m evals.run --suite bot-golden   --limit 20 --budget "$BUDGET" | tee bot-golden.txt
 
+      # The gate: no lower than the floor, and no drop against the last green run's report (the cases both
+      # runs share may lose GOLDEN_SLACK in run.py, one trial per case flickers). The first run has no
+      # baseline, so the floor alone holds it.
       - name: Run the golden suite
         if: steps.decide.outputs.skip != 'true'
         run: |
-          sample=()
+          sample=() baseline=()
           if [ "$CASES" != "0" ]; then sample=(--sample "$CASES" --seed 1); fi
-          uv run python -m evals.run --suite golden "${sample[@]}" --budget "$BUDGET" \
-            --concurrency 6 --report report.json | tee run.txt
+          if [ -f previous/report.json ]; then baseline=(--baseline previous/report.json); fi
+          uv run python -m evals.run --suite golden "${sample[@]}" "${baseline[@]}" --budget "$BUDGET" \
+            --threshold "$FLOOR" --concurrency 6 --report report.json | tee run.txt
 
       # The web suite drives the fixture admin app, so it rides that variable. It runs after the
       # required golden step with its own timeout, so it can never starve the job's budget.
