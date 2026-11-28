@@ -41,6 +41,7 @@ from typing import Any, cast
 import httpx
 
 from evals import report as report_page
+from evals.cases import golden as golden_cases
 from evals.cases.golden import CASES, Golden
 from evals.evaluators.scores import Scores, score
 from evals.metrics import SuiteKind
@@ -62,6 +63,12 @@ from tools import prompt_evidence
 # work as slack is measuring the queue, not the product.
 TIMEOUT_S = 900.0
 POLL_S = 4.0
+DATASET_BUDGET_USD = 1.0  # a dataset suite's task cap when `--budget` is not given
+BUDGET_NOTE = "the task reached its budget and was cancelled"
+REPLY_NOTE = "answered in a reply; nothing was published to verify"
+# How many more shared cases a golden run may fail than its baseline did: one trial per case flickers,
+# so the gate fails on a drop, never on one case that came up the other way this time.
+GOLDEN_SLACK = 2
 
 
 @dataclass
@@ -174,12 +181,60 @@ def missing_terms(terms: tuple[str, ...], content: str, preview: str) -> tuple[s
     return tuple(t for t in terms if t not in content and t not in preview)
 
 
-async def run_case(client: httpx.AsyncClient, case: Golden) -> Result:
+async def over_budget(client: httpx.AsyncClient, task_id: str) -> bool:
+    """Is the task parked on an open budget gate (the Bursar reached its ceiling)?"""
+    gates = (await client.get("/v1/gates")).json()
+    return any(g["task_id"] == task_id and g["kind"] == "budget" for g in gates)
+
+
+def why_stopped(events: list[str]) -> str:
+    """The last escalation's diagnosis (what failed: why), so a case that delivered nothing says why."""
+    said = ""
+    for line in events:
+        if '"escalation.raised"' in line:
+            diagnosis = json.loads(line.removeprefix("data: ")).get("diagnosis") or {}
+            said = ": ".join(p for p in (diagnosis.get("what_failed"), diagnosis.get("why")) if p)
+    return said
+
+
+def golden_gate(ok: dict[str, bool], baseline: dict[str, bool] | None, floor: float) -> str:
+    """Why a golden run fails its gate, or "" when it passes: below `floor`, or (given the last green
+    run's cases) more than GOLDEN_SLACK more of the cases both runs share failing than failed then."""
+    rate = sum(ok.values()) / len(ok) if ok else 0.0
+    if rate < floor:
+        return f"{rate:.0%} is below the {floor:.0%} floor"
+    shared = sorted(ok.keys() & (baseline or {}).keys())
+    if baseline is None or not shared:
+        return ""
+    before, now = sum(baseline[n] for n in shared), sum(ok[n] for n in shared)
+    if now < before - GOLDEN_SLACK:
+        lost = ", ".join(n for n in shared if baseline[n] and not ok[n])
+        return f"{now} of the {len(shared)} shared cases pass, the baseline passed {before} (now failing: {lost})"
+    return ""
+
+
+def baseline_cases(path: str) -> dict[str, bool] | None:
+    """The cases of an earlier golden `--report`, by name: did each pass."""
+    if not path:
+        return None
+    try:
+        cases = json.loads(pathlib.Path(path).read_text(encoding="utf-8"))["cases"]
+    except (OSError, ValueError, KeyError) as error:
+        raise SystemExit(f"golden: cannot read --baseline {path}: {error}") from error
+    return {name: bool(case.get("ok")) for name, case in cases.items()}
+
+
+async def run_case(client: httpx.AsyncClient, case: Golden, budget_usd: float | None = None) -> Result:
+    """One golden case as a real task; `budget_usd` caps it, else the deployment's default budget does."""
     started = time.monotonic()
     try:
         payload: dict[str, object] = {"goal": case.goal, "inputs": _attach(case.inputs)}
+        if budget_usd is not None:
+            payload["budget"] = {"usd": budget_usd}
         if case.bots:
             payload["bots"] = list(case.bots)  # the bot-golden lane pins its subject
+        if case.deliverable:
+            payload["deliverable"] = case.deliverable  # a file to verify, not a reply
         accepted = await client.post("/v1/tasks", json=payload)
         accepted.raise_for_status()
         task_id = accepted.json()["task_id"]
@@ -189,6 +244,11 @@ async def run_case(client: httpx.AsyncClient, case: Golden) -> Result:
             task = (await client.get(f"/v1/tasks/{task_id}")).json()
             if task["status"] in ("delivered", "failed", "cancelled"):
                 break
+            if task["status"] == "waiting" and await over_budget(client, task_id):
+                # The Bursar parked it on a budget gate, which has no clock: only a person ends that
+                # wait. Cancel what this harness started and say why, rather than wait out TIMEOUT_S.
+                await client.post(f"/v1/tasks/{task_id}/cancel")
+                return Result(case.name, "over budget", 0, time.monotonic() - started, note=BUDGET_NOTE)
         else:
             return Result(case.name, "timeout", 0, time.monotonic() - started)
 
@@ -204,7 +264,10 @@ async def run_case(client: httpx.AsyncClient, case: Golden) -> Result:
             if '"artifact.produced"' in line
         ]
         if not artifacts:
-            return Result(case.name, "no artifact", attempts, time.monotonic() - started)
+            # A delivered task with no artifact answered in a reply: nothing was published to verify.
+            replied = REPLY_NOTE if task["status"] == "delivered" else ""
+            note = why_stopped(events) or replied
+            return Result(case.name, "no artifact", attempts, time.monotonic() - started, note=note)
 
         report = await receipt(client, artifacts[-1], until=started + TIMEOUT_S)
         if report is None:
@@ -356,7 +419,7 @@ async def _played(
         concurrency = args.concurrency or suite.concurrency
         print(f"── {name}: {len(runnable)} rows x {k}, {concurrency} at a time ──", file=sys.stderr)
         player = conversation.ConversationRunner if suite.chat else RecordingRunner
-        runner = player(client, budget_usd=args.budget, timeout_s=suite.timeout_s)
+        runner = player(client, budget_usd=dataset_budget(args), timeout_s=suite.timeout_s)
         trials = await run_trials(runnable, runner, trials=k, concurrency=concurrency, on_done=_progress)
         turns = runner.turns if isinstance(runner, RecordingRunner) else []
         card = None
@@ -464,6 +527,11 @@ async def run_suite(name: str, args: argparse.Namespace) -> int:
     return 0
 
 
+def dataset_budget(args: argparse.Namespace) -> float:
+    """A dataset suite's task cap: `--budget`, else `DATASET_BUDGET_USD`."""
+    return DATASET_BUDGET_USD if args.budget is None else args.budget
+
+
 def selection_of(name: str, args: argparse.Namespace) -> Selection:
     """The selection flags of a dataset run; `--failed-in` resolves to the rows that failed in that report."""
     failed: frozenset[str] = frozenset()
@@ -512,9 +580,19 @@ async def main() -> int:
         "--limit", type=int, default=None, help="how many cases (dataset suites: how many runnable rows)"
     )
     parser.add_argument("--concurrency", type=_at_least_one, default=None, help="cases at a time (4)")
-    parser.add_argument("--threshold", type=float, default=0.90)
+    parser.add_argument(
+        "--threshold",
+        type=float,
+        default=0.90,
+        help="golden: the pass rate a run must reach (with --baseline, a floor)",
+    )
     parser.add_argument("--report", default="", help="Write a JSON report here (for the run-over-run diff).")
-    parser.add_argument("--budget", type=float, default=1.0, help="dataset suites: each task's USD cap")
+    parser.add_argument(
+        "--budget",
+        type=float,
+        default=None,
+        help=f"each task's USD cap (dataset suites: {DATASET_BUDGET_USD}; golden: the deployment's default)",
+    )
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -529,7 +607,11 @@ async def main() -> int:
     parser.add_argument(
         "--json", action="store_true", help="dataset suites: print the report as JSON, nothing else"
     )
-    parser.add_argument("--baseline", default="", help="dataset suites: an earlier report to compare with")
+    parser.add_argument(
+        "--baseline",
+        default="",
+        help="an earlier report to compare with (golden: its --report; fails on a drop)",
+    )
     parser.add_argument("--gate", action="store_true", help="dataset suites: exit 1 unless the gate passes")
     chooser = parser.add_argument_group("dataset suites: which rows (flags combine with AND)")
     chooser.add_argument("--rows", type=_names, default=(), help="only these row ids: ID[,ID...]")
@@ -550,11 +632,13 @@ async def main() -> int:
     )
     chooser.add_argument("--seed", type=int, default=None, help="the --sample seed (0)")
     args = parser.parse_args()
-    selecting = args.rows or args.tag or args.match or args.failed_in or args.sample is not None
+    selecting = args.rows or args.tag or args.match or args.failed_in
     if selecting and args.suite not in SUITES:
-        raise SystemExit(
-            f"--rows, --tag, --match, --failed-in and --sample need --suite, one of: {', '.join(SUITES)}"
-        )
+        raise SystemExit(f"--rows, --tag, --match and --failed-in need --suite, one of: {', '.join(SUITES)}")
+    if args.sample is not None and args.suite not in (*SUITES, None, "golden"):
+        raise SystemExit(f"--sample needs golden or a dataset suite ({', '.join(SUITES)})")
+    if args.seed is not None and args.sample is None:
+        raise SystemExit("--seed draws a --sample; give --sample N too")
     if args.dry_run:
         names = [args.suite] if args.suite else list(SUITES)
         if unknown := [name for name in names if name not in SUITES]:
@@ -604,6 +688,9 @@ async def main() -> int:
             return 0
     else:
         cases = CASES[: args.limit]
+        if args.sample is not None:
+            cases = golden_cases.sample(cases, args.sample, args.seed or 0)
+    held = baseline_cases(args.baseline)  # read before any spend: a bad path fails here, not after the run
     gate = asyncio.Semaphore(args.concurrency)
 
     print(f"── {args.suite}: {len(cases)} cases, {args.concurrency} at a time ──\n")
@@ -616,7 +703,7 @@ async def main() -> int:
 
         async def bounded(case: Golden) -> Result:
             async with gate:
-                result = await run_case(client, case)
+                result = await run_case(client, case, args.budget)
                 mark = "✓" if result.ok else "✗"
                 extra = f"  missing: {', '.join(result.missing)}" if result.missing else ""
                 if result.note and not result.ok:
@@ -680,10 +767,11 @@ async def main() -> int:
         )
         print(f"\n   report → {args.report}")
 
-    if rate < args.threshold:
-        print(f"\nFAIL: {rate:.0%} is below the {args.threshold:.0%} gate")
+    if why := golden_gate({r.case: r.ok for r in results}, held, args.threshold):
+        print(f"\nFAIL: {why}")
         return 1
-    print(f"\nPASS: {rate:.0%} ≥ {args.threshold:.0%}")
+    against = " and holds against the baseline" if held is not None else ""
+    print(f"\nPASS: {rate:.0%} ≥ {args.threshold:.0%}{against}")
     return 0
 
 

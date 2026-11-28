@@ -13,9 +13,12 @@ forty minutes into a suite run.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
-from evals.cases.golden import BUILTIN_SKILLS, CASES
+import pytest
+
+from evals.cases.golden import BUILTIN_SKILLS, CASES, CASES_FILE, Category, load_cases, sample
 
 
 def test_hundred_cases_uniquely_named() -> None:
@@ -52,3 +55,80 @@ def test_code_and_spec_cases_are_self_contained() -> None:
     for c in CASES:
         if c.skill in ("code", "spec"):
             assert c.inputs == (), f"{c.name} ({c.skill}) should have no input fixture"
+
+
+def _write(tmp_path: Path, *rows: dict[str, object]) -> Path:
+    path = tmp_path / "golden.jsonl"
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+    return path
+
+
+ROW: dict[str, object] = {
+    "name": "memo",
+    "category": "single-brief",
+    "goal": "Write the memo.",
+    "inputs": [],
+    "must_contain": ["41.6"],
+    "deliverable": "document",
+}
+BROWSER_ROW: dict[str, object] = {
+    **ROW,
+    "name": "site",
+    "category": "browser",
+    "goal": "Open {base}/index.html",
+    "deliverable": None,
+}
+
+
+def test_the_cases_are_data_in_their_jsonl_file() -> None:
+    assert load_cases(CASES_FILE) == CASES
+    assert {c.category for c in CASES} <= set(Category)
+
+
+def test_a_field_outside_the_schema_fails_to_load(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match=r"golden\.jsonl:1"):
+        load_cases(_write(tmp_path, {**ROW, "musts": ["x"]}))
+
+
+def test_a_case_states_its_inputs_rather_than_defaulting_to_a_brief(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="inputs"):
+        load_cases(_write(tmp_path, {k: v for k, v in ROW.items() if k != "inputs"}))
+
+
+def test_a_case_states_its_deliverable_even_when_the_lead_decides(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="deliverable"):
+        load_cases(_write(tmp_path, {k: v for k, v in ROW.items() if k != "deliverable"}))
+    with pytest.raises(ValueError, match="deliverable"):
+        load_cases(_write(tmp_path, {**ROW, "deliverable": "webapp"}))
+
+
+def test_every_case_asks_for_the_file_it_scores() -> None:
+    """Without the dial the Lead answers a short ask in a reply, which publishes nothing to verify, so
+    every case names a file, and a labelled skill's case names that skill's kind of file."""
+    assert [c.name for c in CASES if not c.deliverable] == []
+    kinds = {"model": "spreadsheet", "code": "code", "deck": "deck", "organize": "collection"}
+    wrong = [c.name for c in CASES if c.deliverable != kinds.get(c.skill, "document")]
+    assert wrong == []
+
+
+def test_a_browser_row_comes_only_with_a_site_and_names_it(tmp_path: Path) -> None:
+    path = _write(tmp_path, ROW, BROWSER_ROW)
+    assert [c.name for c in load_cases(path)] == ["memo"]
+    with_site = load_cases(path, base="https://fixture.invalid")
+    assert [c.goal for c in with_site] == ["Write the memo.", "Open https://fixture.invalid/index.html"]
+
+
+def test_only_a_browser_row_may_name_the_site(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="only a browser row"):
+        load_cases(_write(tmp_path, {**ROW, "goal": "Open {base}/x"}))
+    with pytest.raises(ValueError, match="only a browser row"):
+        load_cases(_write(tmp_path, {**BROWSER_ROW, "goal": "Open the site"}))
+
+
+def test_a_sample_is_seeded_and_kept_in_file_order() -> None:
+    drawn = sample(CASES, 20, seed=1)
+    assert drawn == sample(CASES, 20, seed=1)
+    assert len(drawn) == 20 and drawn != sample(CASES, 20, seed=2)
+    order = [c.name for c in CASES]
+    assert [c.name for c in drawn] == sorted((c.name for c in drawn), key=order.index)
+    assert sample(CASES, 500, seed=1) == CASES

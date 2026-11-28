@@ -123,8 +123,8 @@ enforcement hook lands with ADR-051 W1 (the doctrine test says so honestly).
 | policy rows + transforms oracle + book doctrine | **gates** `just check` (unit) | per commit | $0 |
 | plan rows | **gates** the integration suite + `--suite triage` | per merge / nightly | $0 |
 | live rows | **gates** `just range` budgets | nightly + on demand | cents |
-| judged rows | **alarms** via `evals_diff` | nightly, advisory | cents |
-| orphan suites (bot-selection · skill-golden · bot-golden) | advisory (selection: drift alarm) | nightly (newly wired) | cents |
+| judged rows | **alarms** via `evals_diff` | weekly, advisory (ADR-008 amended) | cents |
+| orphan suites (bot-selection · skill-golden · bot-golden) | advisory (selection: drift alarm) | weekly (ADR-008 amended) | cents |
 
 `evals.yml` gains the five steps; the graded/live steps no-op gracefully without a funded
 key secret in CI and run on-demand locally until one exists. The transforms sweep needs no

@@ -59,6 +59,14 @@ micro, with a fresh session at every step. Post-m9 it inverted into a tax:
   after §15, and the environment list's URL-topology rule moved into §14.)
 - ADR-007's validation invariant is amended in place: the reshape landed gated on `just check`
   + the full suite + byte-identical `just export-contract` + `just smoke`, not stage replays.
+- (Amended 2026-11-26: evals run weekly, not nightly, for cost. A nightly of the whole golden
+  hundred could spend up to 100 tasks x the default 2 USD budget every night and mostly re-measured
+  an unchanged tree. Now: a seeded sample of 20 golden cases with each task capped at 0.50 USD and
+  15 trivial50 rows, Mondays, skipped when nothing the evals measure changed since the last green run
+  (the prompts every agent reads, the skills, the model catalog seed, the eval cases, the lockfile);
+  a pull request that changes `prismoid/ai` or `skills` decides a seeded sample of 50 outcome rows
+  in process (`--suite decide`, advisory); the whole hundred runs by hand before a release. The
+  golden cases also moved from code to data, `evals/cases/golden.jsonl`.)
 
 ## Consequences
 
